@@ -5,13 +5,17 @@ Ideally scripts/tools (in `bin`) are callable from my IDE (in place of the real 
 
 ## Shortcut
 
-```nano ~/.bashrc```
-
-and add something like:
-
+### Linux
+`nano ~/.bashrc` and add something like:
 ```bash
 # Nix Tools
 export PATH=~/repos/gitlab.com/jeremy-sells/nix-tools/bin:$PATH
+```
+
+### Mac
+`nano ~/.bash_profile` and add something like:
+```bash
+export PATH="~/code/gitlab.com/jeremy-sells/nix-tools:$PATH"
 ```
 
 ## Updating
