@@ -6,6 +6,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 source "${DIR}/../.env"
 
 COMMAND=$@
+export YARN_UBUNTU_VERSION=${YARN_UBUNTU_VERSION}
 
 docker-compose \
     --file "${DIR}/../docker-compose.yml" \
