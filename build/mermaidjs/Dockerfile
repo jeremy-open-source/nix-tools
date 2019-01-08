@@ -29,4 +29,4 @@ RUN     apt-get update \
     &&  rm -rf /src/*.deb
 
 RUN yarn --verbose add mermaid.cli
-ADD puppeteer-config.json /
+ADD ./puppeteer-config.json /
