@@ -2,5 +2,21 @@ version: '3.6'
 services:
   mermaidjs:
     build:
-      context: build/mermaidjs
+      context: build/mermaid-js
       dockerfile: Dockerfile
+#  php-tools:
+#    build:
+#      context: .
+#      dockerfile: build/php-tools/Dockerfile
+#      args:
+#        FROM_IMAGE: "ubuntu:${PHP_TOOLS_UBUNTU_VERSION}"
+#    volumes:
+#      - "/etc/passwd:/etc/passwd:ro"
+#      - "/etc/group:/etc/group:ro"
+#      - "/tmp:/tmp"
+  yarn:
+    build:
+      context: build/yarn
+      dockerfile: Dockerfile
+      args:
+        FROM_IMAGE: "ubuntu:${YARN_UBUNTU_VERSION}"

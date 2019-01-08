@@ -1,0 +1,26 @@
+{
+  "name": "jeremysells/php-tools",
+  "description": "Adds my php tools.",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Jeremy Sells",
+      "homepage": "https://www.jeremysells.info/contact"
+    }
+  ],
+  "require": {
+    "php": ">=7.2",
+    "phpunit/phpunit": "@stable",
+    "phpmd/phpmd": "@stable",
+    "friendsofphp/php-cs-fixer": "@stable",
+    "squizlabs/php_codesniffer": "@stable",
+    "phpstan/phpstan": "@stable",
+    "sebastian/phpcpd": "@stable",
+    "vimeo/psalm": "@stable",
+    "jakub-onderka/php-parallel-lint": "@stable",
+    "phan/phan": "@stable",
+    "phploc/phploc": "@stable",
+    "phpmetrics/phpmetrics": "@stable",
+    "sensiolabs/security-checker": "@stable"
+  }
+}
