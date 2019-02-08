@@ -20,5 +20,6 @@ docker run \
     --volume /etc/group:/etc/group:ro \
     --volume ${PWD}:/${PWD} \
     --volume "$PWD:/output" \
+    --network host \
     schemaspy/schemaspy:${SCHEMASPY_VERSION} \
     ${COMMAND}
