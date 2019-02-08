@@ -2,10 +2,16 @@
 
 set -e
 
+# Not fully tested!
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 source "${DIR}/../.env"
 
 COMMAND=$@
+
+#
+#echo $COMMAND
+#echo ""
 
 docker run \
     --rm \
@@ -13,6 +19,6 @@ docker run \
     --volume /etc/passwd:/etc/passwd:ro \
     --volume /etc/group:/etc/group:ro \
     --volume ${PWD}:/${PWD} \
-    --workdir="${PWD}" \
+    --volume "$PWD:/output" \
     schemaspy/schemaspy:${SCHEMASPY_VERSION} \
     ${COMMAND}
