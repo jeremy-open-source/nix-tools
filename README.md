@@ -24,4 +24,10 @@ Call `nix-tools-update.sh` to update everything.
 
 ## Running
 
-All tools in the "bin" folder are 
+All tools in the "bin" folder are generally executed as if they were locally installed.
+
+e.g.
+
+```bash
+terraform.sh plan
+```

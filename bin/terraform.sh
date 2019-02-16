@@ -11,11 +11,12 @@ docker run \
     -it \
     --rm \
     --user $(id -u):$(id -g) \
-    --env HOME=$HOME \
-    --volume $HOME/.secrets:$HOME/.secrets:ro \
     --volume /etc/passwd:/etc/passwd:ro \
     --volume /etc/group:/etc/group:ro \
+    --env HOME=$HOME \
+    --volume $HOME/.aws:$HOME/.aws:ro \
     --volume ${PWD}:/${PWD} \
+    --workdir="${PWD}" \
     --network host \
     hashicorp/terraform:${TERRAFORM_VERSION} \
     ${COMMAND}
