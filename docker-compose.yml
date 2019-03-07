@@ -14,9 +14,3 @@ services:
 #      - "/etc/passwd:/etc/passwd:ro"
 #      - "/etc/group:/etc/group:ro"
 #      - "/tmp:/tmp"
-  yarn:
-    build:
-      context: build/yarn
-      dockerfile: Dockerfile
-      args:
-        FROM_IMAGE: "ubuntu:${YARN_UBUNTU_VERSION}"
