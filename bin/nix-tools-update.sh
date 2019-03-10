@@ -16,5 +16,5 @@ docker pull ${PHPUNIT_IMAGE}:${PHPUNIT_VERSION}
 # Build the docker-compose
 docker-compose \
     --file "${DIR}/../docker-compose.yml" \
-    --project-name ${PROJECT_NAME} \
+    --project-directory "${DIR}/.." \
     build --pull
