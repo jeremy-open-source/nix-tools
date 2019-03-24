@@ -22,5 +22,5 @@ docker run \
     --volume ${PWD}:/${PWD} \
     --workdir="${PWD}" \
     --network host \
-    hashicorp/terraform:${TERRAFORM_VERSION} \
+    ${TERRAFORM_IMAGE}:${TERRAFORM_VERSION} \
     ${COMMAND}
