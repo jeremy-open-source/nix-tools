@@ -18,9 +18,9 @@ docker run \
     --volume /etc/group:/etc/group:ro \
     --env HOME=$HOME \
     --env AWS_PROFILE=${AWS_PROFILE} \
-    --volume $HOME/.aws:$HOME/.aws:ro \
+    --volume $HOME:$HOME:ro \
     --volume ${PWD}:/${PWD} \
     --workdir="${PWD}" \
     --network host \
-    hashicorp/terraform:${TERRAFORM_VERSION} \
+    ${TERRAFORM_IMAGE}:${TERRAFORM_VERSION} \
     ${COMMAND}
