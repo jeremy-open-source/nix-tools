@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-kubectl logs -f $1
+kubectl logs -f deployment/$1
