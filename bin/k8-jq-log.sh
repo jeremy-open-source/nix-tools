@@ -2,7 +2,7 @@
 
 set -e
 
-JQ_ARGS=".message"
+JQ_ARGS=".message" # ".message,.onBehalfOf"
 if [[ "$2" ]]; then
     JQ_ARGS=$2
 fi
