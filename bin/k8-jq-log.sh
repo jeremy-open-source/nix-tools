@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 
-# FIND ENVIRONMENT
-CONTEXT="development"
-if [[ "$1" ]]; then
-    CONTEXT=$1
+set -e
+
+JQ_ARGS=".message"
+if [[ "$2" ]]; then
+    JQ_ARGS=$2
 fi
 
+# FIND ENVIRONMENT
+CONTEXT="development"
+if [[ "$3" ]]; then
+    CONTEXT=$3
+fi
 echo "Starting kubernetes proxy for context ${CONTEXT}"
-kubectl config use-context ${CONTEXT}
 
-kubectl logs deployment/$2 | grep "{" | jq .message
+kubectl logs --context="${CONTEXT}" -f deployment/$1 2>&1 | grep "{" | jq ${JQ_ARGS}
