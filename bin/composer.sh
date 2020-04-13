@@ -26,7 +26,7 @@ fi
 
 # Work out the command
 COMMAND=$@
-if [ $1 == "update" ] || [ $1 == "install" ]; then
+if [ $1 == "update" ] || [ $1 == "install" ] || [ $1 == "require" ]; then
     COMMAND="${COMMAND} --ignore-platform-reqs --no-scripts"
 fi
 
