@@ -6,7 +6,7 @@ def main():
     args = get_args()
 
     df = pandas.read_parquet(args["input"])
-    df.to_json(args["output"])
+    df.to_json(open(args["output"], mode="w"), orient='table')
 
 
 def get_args() -> dict:
@@ -25,7 +25,7 @@ def get_args() -> dict:
     args = parser.parse_args().__dict__
     if args["output"] is None:
         # This could probably be done better!
-        args["output"] = args["input"].replace(".parquet", ".jsonl")
+        args["output"] = args["input"].replace(".parquet", ".json")
     return args
 
 
