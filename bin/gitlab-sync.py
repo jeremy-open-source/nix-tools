@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from dotenv import load_dotenv
 import logging
 import os
@@ -11,6 +13,7 @@ def main():
     project_dir = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/..")
     load_dotenv(dotenv_path=f"{project_dir}/.env")
     logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
+    logging.info(f"Home dir of '{dir_home}'")
     gitlab_com_token = os.environ.get("GITLAB_COM_TOKEN")
     gitlab_com_top_groups = os.environ.get("GITLAB_COM_TOP_GROUP_IDS").split(",")
     base_folder = f"{dir_home}/repos/gitlab_com"

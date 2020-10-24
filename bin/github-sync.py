@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from dotenv import load_dotenv
 import logging
 import os
@@ -13,6 +15,7 @@ def main():
     project_dir = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/..")
     load_dotenv(dotenv_path=f"{project_dir}/.env")
     logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
+    logging.info(f"Home dir of '{dir_home}'")
     github_com_token = os.environ.get("GITHUB_COM_TOKEN")
     github_com_username = os.environ.get("GITHUB_COM_USERNAME")
     github_com_org_list = os.environ.get("GITHUB_COM_ORGS").split(",")
