@@ -3,27 +3,27 @@
 set -e
 
 #DRY_RUN="--dry-run"
-DATE="$(date +%s)"
+DATE="$(date +"%s-%Y%m%d-%H%M%S")"
 USERNAME="$(id -u -n)"
 DIR_FILES="${HOME}/Nextcloud/backup/${USERNAME}-files"
 DIR_FILES_WIP="${DIR_FILES}/wip"
 DIR_FILES_DATE="${DIR_FILES}/${DATE}"
 declare -a BACKUP_DIRS=(
   "${HOME}/.ssh"
-  "${HOME}/.config"
+  #"${HOME}/.config"
   "${HOME}/.docker"
-  "${HOME}/.local"
+  #"${HOME}/.local"
   "${HOME}/.mc"
   "${HOME}/.mozilla"
-  "${HOME}/.npm"
-  "${HOME}/.openra"
-  "${HOME}/.steam"
-  "${HOME}/.var"
+  #"${HOME}/.npm"
+  #"${HOME}/.openra"
+  #"${HOME}/.steam"
+  #"${HOME}/.var"
   # "${HOME}/.wine"
-  "${HOME}/Desktop"
-  "${HOME}/Documents"
-  "${HOME}/bin"
-  "${HOME}/.snap"
+  #"${HOME}/Desktop"
+  #"${HOME}/Documents"
+  #"${HOME}/bin"
+  #"${HOME}/snap"
 )
 declare -a BACKUP_FILES=(
   "${HOME}/.bashrc"
@@ -70,4 +70,6 @@ for BACKUP_FILE in ${BACKUP_FILES[@]}; do
 done
 
 echo "INFO: WIP backup complete. Locking it by date"
-mv ${DIR_FILES_WIP} ${DIR_FILES_DATE}
+# mv ${DIR_FILES_WIP} ${DIR_FILES_DATE}
+(cd ${DIR_FILES} && tar -czvf ${DIR_FILES_DATE}.tar.gz -C wip .)
+rm -rf "${DIR_FILES_WIP}"
