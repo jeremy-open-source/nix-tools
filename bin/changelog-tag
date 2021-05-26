@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import subprocess
+
+import yaml
+import logging
+
+changelog_required = {
+    "releases": dict
+}
+string_bool_trues = ['true', '1', 't', 'y', 'yes']
+
+
+logger = logging.getLogger(__name__)
+
+
+def main(git_tag: bool, git_push: bool):
+    # Bootstrap
+    logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
+
+    # Load changelog.yml
+    changelog = yaml.safe_load(open("changelog.yml", "r").read())
+    logging.debug("Opened and loaded changelog.yml")
+
+    # Validation
+    for required_key, required_type in changelog_required.items():
+        if required_key not in changelog.keys():
+            raise Exception(f"'{required_key}' key is missing from changelog dict")
+
+        if not isinstance(changelog[required_key], required_type):
+            raise Exception(f"'{required_key}' key is not required type of '{required_type.__name__}'."
+                            f" It is '{type(changelog_required[required_key]).__name__}'")
+    logging.debug("Validated changelog")
+
+    # Get the last version
+    versions = list(changelog["releases"].keys())
+    last_version = versions[0]
+    version_tag = f"v{last_version}"
+    logging.info(f"Detected that the last version is '{last_version}' ('{version_tag}')")
+
+    # Validate tag does not exist already
+    existing_tags = run_command(["git", "tag", "-l"]).strip("\n").split("\n")
+    if version_tag in existing_tags:
+        # https://devconnected.com/how-to-delete-local-and-remote-tags-on-git/
+        raise Exception(f"Version tag '{version_tag}' already exists!\n"
+                        f"If you wish to delete it (use with caution!!!)\n"
+                        f"From local: 'git tag -d {version_tag}'\n"
+                        f"Push delete: 'git push --delete origin {version_tag}'")
+
+    # Get version changes
+    changes_list = changelog["releases"][last_version]
+
+    # Create the git tag message
+    tag_message = f"Release {version_tag}. Changes:"
+    for change in changes_list:
+        tag_message = tag_message + "\n" + f" - {change}"
+    logging.info(f"Tag message:\n '{tag_message}'")
+
+    # Git tag
+    if git_tag:
+        run_command(["git", "tag", "-a", version_tag, "-m", tag_message])
+
+    if git_push:
+        run_command(["git", "push", "origin", version_tag])
+
+
+def run_command(command_params: list) -> str:
+    """
+    Runs a command
+    :param command_params: list
+    :return: str
+    """
+    result = subprocess.run(command_params, stdout=subprocess.PIPE)
+    if result.returncode != 0:
+        raise Exception("Command failed")
+    return result.stdout.decode("utf-8")
+
+
+def get_args() -> dict:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dry-run",
+        required=False,
+        default="False",
+        help="Dry run (do not create tags or change the changelog file)",
+    )
+    parser.add_argument(
+        "--git-tag",
+        required=False,
+        default="True",
+        help="Add the git tag",
+    )
+    parser.add_argument(
+        "--git-push",
+        required=False,
+        default="True",
+        help="Push the git tag",
+    )
+
+    # Convert to Dict and tidy up
+    args_dict = parser.parse_args().__dict__
+
+    # String to bool conversion
+    bool_conversions = ["dry_run", "git_tag", "git_push"]
+    for bool_conversion in bool_conversions:
+        args_dict[bool_conversion] = args_dict[bool_conversion].lower() in string_bool_trues
+
+    return args_dict
+
+
+def args_apply_dry_run(args_dict: dict) -> dict:
+    if args_dict["dry_run"]:
+        args_dict["git_tag"] = False
+        args_dict["git_push"] = False
+    del args_dict["dry_run"]
+    return args_dict
+
+
+def validate_ags(args_dict: dict):
+    if not args_dict["git_tag"] and args_dict["git_push"]:
+        raise Exception("Can not have git-push without git-tag!")
+
+
+if __name__ == '__main__':
+    main_args = args_apply_dry_run(get_args())
+    validate_ags(main_args)
+    main(**main_args)
