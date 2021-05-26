@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import pprint
+import subprocess
+
+import yaml
+import logging
+from logging import INFO as LOG_INFO, DEBUG as LOG_DEBUG
+
+release_types = {
+    "major": 0,  # (x+1).0.0
+    "minor": 1,  # ?.(x+1).0
+    "patch": 2,  # ?.?.(x+1)
+}
+release_type_post = "minor"
+
+changelog_required = {
+    "next-release": str,
+    "unreleased": list,
+    "releases": dict
+}
+string_bool_trues = ['true', '1', 't', 'y', 'yes']
+
+logger = logging.getLogger(__name__)
+
+
+class Dumper(yaml.Dumper):
+    def increase_indent(self, flow=False, *args, **kwargs):
+        return super().increase_indent(flow=flow, indentless=False)
+
+
+def main(dry_run: bool, git_action: bool):
+    # Bootstrap
+    logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
+
+    # Switch to master
+    if git_action:
+        run_command(["git", "checkout", "master"])
+        run_command(["git", "pull"])
+
+    # Load changelog.yml
+    changelog = yaml.safe_load(open("changelog.yml", "r").read())
+    logging.debug("Opened and loaded changelog.yml")
+
+    # Validation
+    for required_key, required_type in changelog_required.items():
+        if required_key not in changelog.keys():
+            raise Exception(f"'{required_key}' key is missing from changelog dict")
+
+        if not isinstance(changelog[required_key], required_type):
+            raise Exception(f"'{required_key}' key is not required type of '{required_type.__name__}'."
+                            f" It is '{type(changelog_required[required_key]).__name__}'")
+    if changelog["next-release"] not in release_types.keys():
+        raise Exception(f"'next-release' value is invalid. It needs to be one of {list(release_types.keys())}")
+    logging.debug("Validated changelog")
+
+    # Get the last version
+    versions = list(changelog["releases"].keys())
+    last_version = "0.0.0"
+    if len(versions) != 0:
+        last_version = versions[0]
+    logging.info(f"Detected that the last version is '{last_version}'")
+
+    # Determine the next version
+    next_release = changelog["next-release"]
+    next_version_parts = last_version.split(".")
+    next_release_section = release_types[next_release]
+    for i in range(len(next_version_parts)):
+        if i == next_release_section:
+            next_version_parts[i] = str(int(next_version_parts[i]) + 1)
+        elif i > next_release_section:
+            next_version_parts[i] = "0"
+    next_version = ".".join(next_version_parts)
+    next_version_tag = f"v{next_version}"
+    logging.info(f"Determined that the next version is '{next_version}' ('{next_version_tag}')")
+
+    # Add the changes
+    changelog["releases"] = {
+        **{next_version: changelog["unreleased"]},
+        **changelog["releases"]
+    }
+
+    # Cleanup changelog (defaults)
+    changelog["next-release"] = release_type_post
+    changelog["unreleased"] = []
+
+    # Print changelog and handle dry run
+    level = LOG_DEBUG
+    if dry_run:
+        level = LOG_INFO
+    logging.log(level, "New changelog:")
+    logging.log(level, pprint.pformat(changelog, sort_dicts=False))
+
+    # Git commit
+    status = run_command(["git", "diff-index", "--name-only", "HEAD"]).strip("\n")
+    if status != "":
+        raise Exception(f"Uncommitted files exist, please commit these first!!! '{status}'")
+
+    # Determine branch
+    branch = f"release/{next_version_tag}"
+    logging.debug(f"Git branch '{branch}'")
+
+    # Git branch and push
+    if git_action:
+        run_command(["git", "checkout", "-b", branch])
+
+    if not dry_run:
+        changelog_file = open("changelog.yml", "w")
+        changelog_file.write(yaml.dump(changelog, sort_keys=False, width=120, indent=2, Dumper=Dumper))
+        changelog_file.close()
+
+    if git_action:
+        run_command(["git", "add", "changelog.yml"])
+        run_command(["git", "commit", "-m", f"Release version {next_version_tag} changelog updates"])
+        push_responses = run_command(["git", "push", "--set-upstream", "origin", branch]).strip("\n").split("\n")
+        for push_response in push_responses:
+            clean_push_response = push_response.strip()
+            if clean_push_response.startswith("remote:"):
+                logging.info(clean_push_response)
+
+
+def run_command(command_params: list) -> str:
+    """
+    Runs a command
+    :param command_params: list
+    :return: str
+    """
+    result = subprocess.run(command_params, stdout=subprocess.PIPE)
+    if result.returncode != 0:
+        raise Exception("Command failed")
+    return result.stdout.decode("utf-8")
+
+
+def get_args() -> dict:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dry-run",
+        required=False,
+        default="False",
+        help="Dry run (do not create tags or change the changelog file)",
+    )
+    parser.add_argument(
+        "--git-action",
+        required=False,
+        default="True",
+        help="Preform git actions i.e. branch, commit and write new changelog",
+    )
+
+    # Convert to Dict and tidy up
+    args_dict = parser.parse_args().__dict__
+
+    # String to bool conversion
+    bool_conversions = ["dry_run", "git_action"]
+    for bool_conversion in bool_conversions:
+        args_dict[bool_conversion] = args_dict[bool_conversion].lower() in string_bool_trues
+
+    return args_dict
+
+
+def args_apply_dry_run(args_dict: dict) -> dict:
+    if args_dict["dry_run"]:
+        args_dict["git_action"] = False
+    return args_dict
+
+
+if __name__ == '__main__':
+    main_args = args_apply_dry_run(get_args())
+    main(**main_args)
