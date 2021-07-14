@@ -2,7 +2,9 @@
 
 set -e
 
-IMAGE=$(cat Dockerfile | sed -n -e '/^FROM/p' | cut -c6-)
+FILE=${2:-Dockerfile}
+
+IMAGE=$(cat "${FILE}" | sed -n -e '/^FROM/p' | cut -c6-)
 SHELL=${1:-bash}
 DIR=$(pwd)
 ADDITIONAL_ARGS=""
@@ -11,4 +13,4 @@ USER="root"
 
 COMMAND="docker run --rm -it --user ${USER} -v ${DIR}:${PROJECT_HOME} ${ADDITIONAL_ARGS} ${IMAGE} ${SHELL}"
 echo "Running command: ${COMMAND}"
-eval $COMMAND
+eval ${COMMAND}

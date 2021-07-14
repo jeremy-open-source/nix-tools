@@ -29,5 +29,5 @@ All tools in the "bin" folder are generally executed as if they were locally ins
 e.g.
 
 ```bash
-terraform.sh plan
+js-terraform.sh plan
 ```
