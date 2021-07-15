@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+set -e
+
+REPO="$@"
+INTO_DIR="${HOME}/repos"
+
+# Remove
+REPO_NO_COMMAND=$(echo "${REPO}" | xargs | sed -e "s/^git clone //" -e "s/$//")  # :cry: @ "git clone" prefix
+
+# Remove "git@", "https://" from front. i.e. "github.com:jeremysells/something.git"
+REPO_NO_PROTOCOL=$(echo "${REPO_NO_COMMAND}" | sed -e "s/^git@//" -e "s/$//" | sed -e "s/^https:\/\///" -e "s/$//")
+
+# Removing ".git" from end. i.e. "github.com:jeremysells/something"
+REPO_NO_SUFFIX=$(echo "${REPO_NO_PROTOCOL}" | sed -e 's/\(\.git\)*$//g')
+
+# Changing ":" to be "/" "github.com/jeremysells/something"
+REPO_URI_SEGMENT=${REPO_NO_SUFFIX/:/\/}
+
+# Build the path
+REPO_PATH="${INTO_DIR}/${REPO_URI_SEGMENT}"
+
+echo "INFO: Cloning '${REPO_NO_COMMAND}' into '${REPO_PATH}'"
+
+# Git clone
+if [[ ! -d "${REPO_PATH}" ]] ; then
+  git clone "${REPO_NO_COMMAND}" "${REPO_PATH}"
+else
+  echo "WARNING: Directory already exists, skipping clone"
+fi
+
+# Open in IDE
+read -r -p "Open in IDE (blank for no)? :" IDE_OPEN
+if [[ -n "${IDE_OPEN}" ]] ; then
+  echo "Loading editor..."
+  (cd "${REPO_PATH}" && idea . &)
+fi
