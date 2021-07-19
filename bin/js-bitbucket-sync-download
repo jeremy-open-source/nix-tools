@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import os
-from subprocess import call
+import subprocess
 
 import logging
-from typing import Dict
+from typing import Dict, Set
 
 from dotenv import load_dotenv
 
@@ -19,13 +19,13 @@ def nice_sleep():
     sleep(int(os.environ.get("NICE_SLEEP")) / 1000)
 
 
-def all_repos():
+def all_repos() -> Set[str]:
     logger.info("All repos: Running")
     username = os.environ.get("BITBUCKET_USER")
     password = os.environ.get("BITBUCKET_PASS")
     team = os.environ.get("BITBUCKET_TEAM")
 
-    full_repo_list = []
+    full_repo_list = set()
 
     # Request 100 repositories per page (and only their slugs), and the next page URL
     next_page_url = f"https://api.bitbucket.org/2.0/repositories/{team}?pagelen=100&fields=next,values.links.clone.href,values.slug"
@@ -43,7 +43,7 @@ def all_repos():
                     continue
                 git_clone = cloner["href"]
                 logger.info(f"All repos: Found repo {git_clone}")
-                full_repo_list.append(git_clone)
+                full_repo_list.add(git_clone)
 
         # Get the next page URL, if present
         # It will include same query parameters, so no need to append them again
@@ -57,11 +57,25 @@ def all_repos():
 
 
 def clone_repo(clone_url: str):
-    nice_sleep()
     logging.info(f"Cloning '{clone_url}'")
+
     my_env = os.environ.copy()
     my_env["SKIP_ID_OPEN"] = "yes"
-    call(["js-git-clone", clone_url], env=my_env)
+
+    command = ["js-git-clone", clone_url]
+    # subprocess.call(command, env=my_env)
+
+    output = ""
+    p = subprocess.Popen(command, stdout=subprocess.PIPE, env=my_env)
+    for line in iter(p.stdout.readline, b''):
+        logger.info(str(line).strip("\n"))
+        output += str(line)
+    p.stdout.close()
+    p.wait()
+
+    # Sleep only if we have not cloned the repo before
+    if output.count("Directory already exists, skipping clone") <= 0:
+        nice_sleep()
 
 
 def main():
@@ -73,8 +87,11 @@ def main():
     logger.info(f"Home dir of '{dir_home}' and project dir or '{project_dir}'")
 
     repos = all_repos()
-    for repo in repos:
+    repos_count = len(repos)
+    for i, repo in enumerate(repos):
+        logger.info(f"Repo number {str(i + 1)}/{str(repos_count)}")
         clone_repo(repo)
+        logger.info("")
 
     logging.info(f"Done!")
 
