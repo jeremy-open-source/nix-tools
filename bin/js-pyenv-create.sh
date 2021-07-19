@@ -2,6 +2,8 @@
 
 set -e
 
+# WIP!!!!
+
 function wish_to_continue {
   read -p "Are you sure? ('yes' to continue)" -r CONTINUE
   if [[ "${CONTINUE}" != "yes" ]]; then
@@ -10,15 +12,18 @@ function wish_to_continue {
   fi
 }
 
+VERSION="3.8.11"
+
 PROJECT_NAME=$(basename "$PWD")
 # Versions = 'pyenv versions'
-COMMAND="pyenv virtualenv 3.7.6 ${PROJECT_NAME}"
+COMMAND="pyenv virtualenv ${VERSION} ${PROJECT_NAME}"
 
 echo "INFO: Command '${COMMAND}'"
 wish_to_continue
 
 eval $COMMAND
 echo "Please run the following command:"
+echo "pyenv install ${VERSION}"
 echo "pyenv activate ${PROJECT_NAME}"
 echo "Then run 'pip install pip-tools'"
 
