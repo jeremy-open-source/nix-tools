@@ -30,8 +30,12 @@ else
 fi
 
 # Open in IDE
-read -r -p "Open in IDE (blank for no)? :" IDE_OPEN
-if [[ -n "${IDE_OPEN}" ]] ; then
-  echo "Loading editor..."
-  (cd "${REPO_PATH}" && idea . &)
+# echo "DEBUG: SKIP_ID_OPEN=${SKIP_ID_OPEN}"
+if [[ -z "${SKIP_ID_OPEN}" ]] ; then
+  # echo "DEBUG: Asking for IDE open"
+  read -r -p "Open in IDE (blank for no)? :" IDE_OPEN
+  if [[ -n "${IDE_OPEN}" ]] ; then
+    echo "Loading editor..."
+    (cd "${REPO_PATH}" && idea . &)
+  fi
 fi
