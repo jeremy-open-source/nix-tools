@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+REPOS_DIR="${HOME}/repos"
+
+SUB_DIR=${1:-""}
+echo "INFO: Using sub repo dir of '${SUB_DIR}'"
+
+PROJECTS_DIR="${REPOS_DIR}/${SUB_DIR}"
+
+REPOS=$(find "${PROJECTS_DIR}" -type d -execdir test -d {}/.git \; -print -prune)
+
+for REPO in ${REPOS}; do
+  echo "INFO: Repo '${REPO}'"
+  BRANCH="$(cd "${REPO}" && git rev-parse --abbrev-ref HEAD)"
+  echo "DEBUG: Branch is '${BRANCH}'"
+  if [[ "${BRANCH}" == "master" ]]; then
+    echo "INFO: Pulling"
+    (cd "${REPO}" && git pull)
+  else
+    echo "WARNING: Branch is not master, skipping"
+  fi
+  echo ""
+done
+
