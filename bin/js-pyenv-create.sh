@@ -22,9 +22,10 @@ echo "INFO: Command '${COMMAND}'"
 wish_to_continue
 
 eval $COMMAND
-echo "Please run the following command:"
-echo "pyenv install ${VERSION}"
-echo "pyenv activate ${PROJECT_NAME}"
-echo "Then run 'pip install pip-tools'"
+echo "Please run the following command if it fails!:"
+echo "* 'pyenv install ${VERSION}'"
+echo "Please run the following commands:"
+echo "* 'pyenv activate ${PROJECT_NAME}'"
+echo "* 'pip install pip-tools'"
 
 # Note: To remove `pyenv uninstall my-virtual-env`
