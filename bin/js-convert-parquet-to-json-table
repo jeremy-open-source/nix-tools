@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+js-convert-parquet-table-to-jqon.py --input="${1}"

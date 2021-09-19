@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+js-convert-json-table-to-parquet.py --input="${1}"

@@ -1,12 +1,14 @@
+#!/usr/bin/env python3
+
 import argparse
 import pandas
 
 
-def run():
+def main():
     args = get_args()
 
-    df = pandas.read_json(open(args["input"]), orient="table")
-    df.to_parquet(args["output"])
+    df = pandas.read_parquet(args["input"])
+    df.to_json(open(args["output"], mode="w"), orient='table')
 
 
 def get_args() -> dict:
@@ -25,9 +27,9 @@ def get_args() -> dict:
     args = parser.parse_args().__dict__
     if args["output"] is None:
         # This could probably be done better!
-        args["output"] = args["input"].replace(".json", ".parquet")
+        args["output"] = args["input"].replace(".parquet", ".json")
     return args
 
 
 if __name__ == '__main__':
-    run()
+    main()
