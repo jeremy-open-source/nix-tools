@@ -1,5 +1,4 @@
-ARG CHEF_DK_VERSION
-FROM chef/chefdk:${CHEF_DK_VERSION}
+FROM chef/chefdk:4.9.17
 
 # Install extra gem modules
 RUN     gem install --no-user-install docker \

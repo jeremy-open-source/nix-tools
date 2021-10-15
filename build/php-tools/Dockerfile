@@ -1,4 +1,4 @@
-ARG FROM_IMAGE
+ARG FROM_IMAGE=ubuntu:18.04
 FROM ${FROM_IMAGE}
 
 #---INSTALL REQUIREMENTS---
@@ -37,5 +37,5 @@ RUN     DEBIAN_FRONTEND=noninteractive apt-get update \
 #---Install Tools---
 WORKDIR /project
 ENV COMPOSER_DISABLE_ROOT_WARN 1
-ADD ../../composer.json /project
+ADD composer.json /project
 RUN composer update --no-plugins --no-scripts
