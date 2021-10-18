@@ -12,9 +12,14 @@ function wish_to_continue {
   fi
 }
 
-# `pyenv install -l | grep 3.9.`
+# HELP / COMMANDS
+# * Available versions to install `pyenv install -l`
+# * Available versions to install (non external) `pyenv install -l | grep -e "^  [0-9]" | grep -v -e "dev" -e "b"`
+# * Install a version `pyenv install 3.8.11`
+# * Remove Py environment `pyenv uninstall my-virtual-env-name`
+
 # VERSION="3.6.14"  # Ubuntu 18.04
-#VERSION="3.8.11"
+# VERSION="3.8.11"
 VERSION="3.9.6"
 
 PROJECT_NAME=$(basename "$PWD")
@@ -43,4 +48,4 @@ echo "Please run the following commands:"
 echo "* '${COMMAND_2}'"
 # echo "* 'pip install pip-tools'"
 
-# Note: To remove `pyenv uninstall my-virtual-env`
+# Note: To remove
