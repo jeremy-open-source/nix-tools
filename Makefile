@@ -13,8 +13,12 @@ build-php-tools:
 build-py-diagrams:
 	(cd build/py-diagrams && DOCKER_BUILDKIT=1 docker build . -t $(JS_NIX_TOOLS_DOCKER_IMAGE_PREFIX)-py-diagrams:latest)
 
+build-wscat:
+	(cd build/wscat && DOCKER_BUILDKIT=1 docker build . -t $(JS_NIX_TOOLS_DOCKER_IMAGE_PREFIX)-wscat:latest)
+
 build-all:
 	make build-chefdk-and-docker
 	make build-mermaid-js
 	make build-php-tools
 	make build-py-diagrams
+	make build-wscat
