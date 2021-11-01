@@ -12,5 +12,6 @@ docker run \
     --volume /etc/group:/etc/group:ro \
     --volume "${PWD}:/${PWD}" \
     -w="${PWD}" \
+    --network host \
     "${JS_NIX_TOOLS_DOCKER_IMAGE_PREFIX}-wscat:latest" \
     wscat $@
