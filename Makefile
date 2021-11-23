@@ -22,3 +22,6 @@ build-all:
 	make build-php-tools
 	make build-py-diagrams
 	make build-wscat
+
+pip-install:
+	pip3 install -r requirements.in

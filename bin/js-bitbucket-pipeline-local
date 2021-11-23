@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+import logging
+import sys
+from os import getcwd, getenv
+from typing import List
+
+import docker
+import yaml
+from docker import DockerClient
+from docker.models.containers import ExecResult, Container
+
+logger = logging.getLogger(__name__)
+
+
+def main():
+    client = docker.from_env()
+
+    in_dir = getcwd()
+
+    stage_2 = None
+    if len(sys.argv) >= 3:
+        stage_1 = sys.argv[1]
+        stage_2 = sys.argv[2]
+    elif len(sys.argv) >= 2:
+        stage_1 = sys.argv[1]
+    else:
+        stage_1 = input("Enter type (i.e. branches or default): ")
+        if stage_1 != "default":
+            stage_2 = input("Enter stage (i.e. branch name like master): ")
+
+    with open(f"{in_dir}/bitbucket-pipelines.yml", encoding="utf-8") as fp:
+        details = yaml.safe_load(fp)
+        pipelines = details["pipelines"][stage_1]
+        if stage_2 is not None:
+            pipelines = pipelines[stage_2]
+        for steps in pipelines:
+            for step in steps.values():
+                docker_image = "ubuntu:latest"
+                if "image" in details:
+                    docker_image = details["image"]
+                if "image" in step:
+                    docker_image = step["image"]
+
+                run_container(client, docker_image, step["script"], in_dir)
+
+
+def run_container(client: DockerClient, image: str, scripts: List[str], in_dir: str):
+    container: Container = client.containers.run(
+        image=image,
+        working_dir=in_dir,
+        volumes=[
+            f"{in_dir}:{in_dir}"
+        ],
+        remove=True,
+        auto_remove=True,
+        stdin_open=True,
+        detach=True
+    )
+    try:
+        steam: ExecResult = container.exec_run(cmd=["/bin/sh", "-c", " && ".join(scripts)], stream=True)
+        for line in steam.output:
+            print(line.decode("utf-8").strip())
+    finally:
+        container.stop()
+        # container.remove()
+
+
+if __name__ == '__main__':
+    log_level = getenv("LOGLEVEL", "INFO").upper()
+    logging.basicConfig(level=log_level)
+
+    main()
