@@ -16,7 +16,7 @@ def main():
     logging.info(f"Home dir of '{dir_home}'")
     gitlab_com_token = os.environ.get("GITLAB_COM_TOKEN")
     gitlab_com_top_groups = os.environ.get("GITLAB_COM_TOP_GROUP_IDS").split(",")
-    base_folder = f"{dir_home}/repos/gitlab_com"
+    base_folder = f"{dir_home}/repos/gitlab.com"
     logging.info(f"Using base folder '{base_folder}'")
     sync_gitlab(base_folder, gitlab_com_token, gitlab_com_top_groups)
 
@@ -89,6 +89,8 @@ def get_gitlab_projects(token: str, group_id: int) -> list:
         url = f"https://gitlab.com/api/v4/groups/{group_id}/projects?{urlencode(get_params)}"
         result = requests.get(url, headers=headers)
         # total_pages = result.headers.get("X-Total-Pages")
+        if result.status_code != 200:
+            raise Exception(f"Error occured {result.content}")
         response = result.json()
         projects = projects + response
         if len(response) == 0:

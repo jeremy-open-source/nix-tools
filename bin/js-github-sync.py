@@ -19,7 +19,7 @@ def main():
     github_com_token = os.environ.get("GITHUB_COM_TOKEN")
     github_com_username = os.environ.get("GITHUB_COM_USERNAME")
     github_com_org_list = os.environ.get("GITHUB_COM_ORGS").split(",")
-    base_folder = f"{dir_home}/repos/github_com"
+    base_folder = f"{dir_home}/repos/github.com"
     logging.info(f"Using base folder '{base_folder}'")
     sync_github(base_folder, github_com_username, github_com_token, github_com_org_list)
 
