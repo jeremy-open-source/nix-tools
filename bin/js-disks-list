@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+sudo lsblk --output NAME,FSTYPE,SIZE,MOUNTPOINT,LABEL --fs
