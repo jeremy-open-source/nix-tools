@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+HOST=${1}
+NETWORK=${2}
+CIDR=${3:-"/24"}
+
+COMMAND="ssh \"${HOST}\" \"nmap -sP ${NETWORK}${CIDR}\""
+
+echo "INFO: Running '${COMMAND}'"
+sleep 3
+
+eval ${COMMAND}
