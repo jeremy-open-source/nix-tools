@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+HOST=${1}
+DELAY=1
+
+# FIND IP
+IP_COMMAND="ssh ${HOST} \"ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1'\""
+echo "INFO: Running IP='${IP_COMMAND}'"
+sleep ${DELAY}
+IP=$(eval "${IP_COMMAND}")
+echo "IP=${IP}"
+echo ""
+
+# FIND SUBNET
+SUBNET_COMMAND="ssh ${HOST} \"ifconfig | grep -Eo 'netmask (netmask:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '255.0.0.0'\""
+echo "INFO: Running SUBNET='${SUBNET_COMMAND}'"
+sleep ${DELAY}
+SUBNET=$(eval "${SUBNET_COMMAND}")
+echo "SUBNET=${SUBNET}"
+echo ""
+
+# CONVERT SUBNET TO CIDR
+# https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing
+if [[ "${SUBNET}" == "255.255.255.0" ]]; then
+  CIDR="/24"
+elif [[ "${SUBNET}" == "255.255.0.0" ]]; then
+  CIDR="/16"
+else
+  echo "ERROR: Unable to determine CIDR of SUBNET ${SUBNET}"
+  exit 1
+fi
+echo "CIDR=${CIDR}"
+echo ""
+
+# RUN SCAN
+SCAN_COMMAND="ssh ${HOST} \"nmap -sP ${IP}${CIDR}\""
+echo "INFO: Running '${SCAN_COMMAND}'"
+sleep ${DELAY}
+eval "${SCAN_COMMAND}"
+echo ""
