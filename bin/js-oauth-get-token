@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+set -e
+
+AUTH_DOMAIN=${1}
+AUDIENCE=${2}
+CLIENT_ID=${3}
+CLIENT_SECRET=${4}
+
+if [[ -z "${AUTH_DOMAIN}" ]] ; then
+  read -r -p "AUTH_DOMAIN=" AUTH_DOMAIN
+fi
+if [[ -z "${AUDIENCE}" ]] ; then
+  read -r -p "AUDIENCE=" AUDIENCE
+fi
+if [[ -z "${CLIENT_ID}" ]] ; then
+  read -r -p "CLIENT_ID=" CLIENT_ID
+fi
+if [[ -z "${CLIENT_SECRET}" ]] ; then
+  read -r -p "CLIENT_SECRET=" CLIENT_SECRET
+fi
+
+curl  -X POST \
+      --header "cache-control: no-cache" \
+      --header "content-type: application/json" \
+      --data "{\"audience\": \"${AUDIENCE}\", \"grant_type\": \"client_credentials\", \"client_id\": \"${CLIENT_ID}\", \"client_secret\": \"${CLIENT_SECRET}\"}" \
+      "https://${AUTH_DOMAIN}/oauth/token"
