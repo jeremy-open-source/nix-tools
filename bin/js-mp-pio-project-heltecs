@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -e
+
+# https://docs.platformio.org/en/stable/core/quickstart.html
+echo "INFO: Use 'pio boards' for boards"
+
+PROJECT_NAME=${1}
+if [[ -z "${PROJECT_NAME}" ]] ; then
+  read -r -p "Project name (folder) :" PROJECT_NAME
+fi
+
+mkdir -p ${PROJECT_NAME}
+cd ${PROJECT_NAME}
+pio project init --board heltec_wifi_kit_32_v2 --board heltec_wifi_kit_8
+clion .

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -e
+
+ESP_PORT=${1-"/dev/ttyUSB0"}
+
+python -m esptool -p /dev/ttyUSB0 flash_id
