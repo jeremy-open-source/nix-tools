@@ -2,14 +2,12 @@
 
 set -e
 
-echo "ERROR: This does not work manually"
-
 SSH_ARGS="$@"
 if [[ -z "${SSH_ARGS}" ]] ; then
   read -r -p "SSH_ARGS / SERVER: " SSH_ARGS
 fi
 
-ssh-add ~/.ssh/id_ed25519
 eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
 
 ssh -o ForwardAgent=yes ${SSH_ARGS}
