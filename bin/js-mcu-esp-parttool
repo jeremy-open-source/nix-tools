@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -e
+
+echo "WIP"
+
+#
+#IDF_PATH="/opt/espressif/esp-idf"
+#SERIAL_DEVICE=${SERIAL_DEVICE:-"ttyUSB0"}
+#SERIAL_DEVICE_FULL="/dev/${SERIAL_DEVICE}"
+## /dev/fd/0
+#
+#(python3 ${IDF_PATH}/components/esptool_py/esptool/esptool.py \
+#    read_flash 0x9000 0xc00 ${SERIAL_DEVICE_FULL} >&2) 3>&1 | python3 \
+#    ${IDF_PATH}/components/partition_table/gen_esp32part.py ${SERIAL_DEVICE_FULL}
