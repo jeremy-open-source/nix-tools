@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -e
+
+COMMAND="${1}"
+
+cat `which ${COMMAND}`
