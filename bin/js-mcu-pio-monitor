@@ -2,4 +2,6 @@
 
 set -e
 
-pio device monitor
+SERIAL_BAUDRATE=${1:-${SERIAL_BAUDRATE:-"115200"}}
+
+pio device monitor --baud ${SERIAL_BAUDRATE}

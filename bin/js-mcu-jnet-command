@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+set -e
+
+SERIAL_TIME_SEC=${1:-${SERIAL_TIME_SEC:-20}}
+SERIAL_DEVICE=${2:-${SERIAL_DEVICE:-"/dev/ttyUSB0"}}
+SERIAL_BAUDRATE=${3:-${SERIAL_BAUDRATE:-"115200"}}
+
+function serial_message {
+  COMMAND=${1}
+
+  grabserial \
+    --endtime "${SERIAL_TIME_SEC}" \
+    --command "${COMMAND}" \
+    --baudrate "${SERIAL_BAUDRATE}" \
+    --device "${SERIAL_DEVICE}"
+}
+
+serial_message "jnet_restart"
