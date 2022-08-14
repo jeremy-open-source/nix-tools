@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+set -e
+
+echo "INFO: caller-identity"
+aws sts get-caller-identity
+echo ""
+
+echo "INFO: Config location"
+aws configure list
+echo ""
