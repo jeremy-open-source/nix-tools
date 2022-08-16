@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+set -e
+
+TAG="${1}"
+
+if [[ -z "${TAG}" ]]; then
+  read -r -p "TAG: " TAG
+fi
+
+function wish_to_continue {
+  read -p "Are you sure? ('yes' to continue)" -r CONTINUE
+  if [[ "${CONTINUE}" != "yes" ]]; then
+        echo "Bye"
+        exit
+  fi
+}
+
+echo "INFO: TAG='${TAG}'"
+wish_to_continue
+
+echo "INFO: Deleting local tag '${TAG}'"
+git tag -d "${TAG}"
+
+echo "INFO: Deleting remote origin tag '${TAG}'"
+git push --delete origin "${TAG}"
