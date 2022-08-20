@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+set -e
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
+ROOT_DIR=$(realpath "${SCRIPT_DIR}/..")
+
+source "${ROOT_DIR}/.env"
+
+SERIAL_TIME_SEC=${SERIAL_TIME_SEC:-60}
+SERIAL_BAUDRATE=${SERIAL_BAUDRATE:-"115200"}
+SERIAL_DEVICE_FULL=${SERIAL_DEVICE_FULL:-"/dev/ttyUSB0"}
+
+# === FUNCTIONS =============================================================
+
+grabserial \
+  --endtime "${SERIAL_TIME_SEC}" \
+  --baudrate "${SERIAL_BAUDRATE}" \
+  --device "${SERIAL_DEVICE_FULL}"

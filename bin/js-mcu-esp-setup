@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+set -e
+
+if [[ -f ".env" ]]; then
+  source ".env"
+fi
+
+HOSTNAME=${1:-${HOSTNAME:-""}}
+
+if [ -z "${HOSTNAME}" ]; then
+  read -p "HOSTNAME: " HOSTNAME
+fi
+
+SERIAL_TIME_SEC=${SERIAL_TIME_SEC:-3}
+SERIAL_BAUDRATE=${SERIAL_BAUDRATE:-"115200"}
+SERIAL_DEVICE_FULL=${SERIAL_DEVICE_FULL:-"/dev/ttyUSB0"}
+NOTE="Provisioned $(date '+%F %T')"
+
+# === FUNCTIONS =============================================================
+
+function serial_message {
+  COMMAND=${1}
+  echo "INFO: Sending serial command '${COMMAND}'"
+
+  grabserial \
+    --endtime "${SERIAL_TIME_SEC}" \
+    --command "${COMMAND}" \
+    --baudrate "${SERIAL_BAUDRATE}" \
+    --device "${SERIAL_DEVICE_FULL}"
+}
+
+# === LOGIC ACTIONS =========================================================
+serial_message "jnet_permanent_set_device_id_auto"
+serial_message "jnet_permanent_set wifi_main_ssid=${WIFI_MAIN_SSID}"
+serial_message "jnet_permanent_set wifi_main_pass=${WIFI_MAIN_PASS}"
+serial_message "jnet_permanent_set wifi_alt_ssid=${WIFI_ALT_SSID}"
+serial_message "jnet_permanent_set wifi_alt_pass=${WIFI_ALT_PASS}"
+#serial_message "jnet_permanent_set doppler_token=${DOPPLER_TOKEN}"
+#serial_message "jnet_permanent_set action_username=${ACTION_USERNAME}"
+#serial_message "jnet_permanent_set action_password=${ACTION_PASSWORD}"
+serial_message "jnet_permanent_set action_token=${ESP_ACTION_TOKEN}"
+serial_message "jnet_permanent_set note=${NOTE}"
+serial_message "jnet_permanent_set hostname=${HOSTNAME}"
+serial_message "jnet_permanent_save"
+serial_message "jnet_restart"
