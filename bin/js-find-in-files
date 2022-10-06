@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+set -e
+
+TEXT="${@}"
+
+if [[ -z "${TEXT}" ]]; then
+  read -r -p "TEXT: " TEXT
+fi
+
+grep --recursive --line-number --ignore-case "${TEXT}" .
