@@ -76,7 +76,7 @@ def main_projects():
     logger.info("All repos: Running")
     workspace = getenv("BITBUCKET_WORKSPACE")
     projects = getenv("BITBUCKET_PROJECTS", "").split(",")
-    into_folder = getenv("HOME") + "/bitbucket-projects"
+    into_folder = getenv("BITBUCKET_PROJECTS_DIR")
 
     for project_key in projects:
         logger.info("Looking at project '%s'", project_key)
@@ -92,12 +92,10 @@ def main_projects():
 
 
 def main():
-    home_dir = getenv('HOME')
     project_dir = realpath(dirname(realpath(__file__)) + "/..")
     load_dotenv(dotenv_path=f"{project_dir}/.env")
 
     logging.basicConfig(level=getenv("LOGLEVEL", "INFO"))
-    logger.info("home_dir='%s' project_dir='%s'", home_dir, project_dir)
 
     main_projects()
 
