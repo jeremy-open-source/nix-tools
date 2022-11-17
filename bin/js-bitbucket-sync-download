@@ -23,7 +23,7 @@ def all_repos() -> Set[str]:
     logger.info("All repos: Running")
     username = os.environ.get("BITBUCKET_USER")
     password = os.environ.get("BITBUCKET_PASS")
-    team = os.environ.get("BITBUCKET_TEAM")
+    team = os.environ.get("BITBUCKET_WORKSPACE")
 
     full_repo_list = set()
 
@@ -93,7 +93,7 @@ def main():
         clone_repo(repo)
         logger.info("")
 
-    logging.info(f"Done!")
+    logging.info("Done!")
 
 
 if __name__ == '__main__':

@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+
+import os
+
+from collections.abc import Callable
+
+import logging
+from os import getenv, makedirs
+from os.path import realpath, dirname, isdir
+
+from dotenv import load_dotenv
+
+import requests
+from requests.auth import HTTPBasicAuth
+from time import sleep
+import subprocess
+
+
+logger = logging.getLogger(__name__)
+
+
+def nice_sleep():
+    sleep(int(os.environ.get("NICE_SLEEP")) / 1000)
+
+
+def bitbucket_request(url: str, action: Callable[[dict], None]):
+    username = getenv("BITBUCKET_USER")
+    password = getenv("BITBUCKET_PASS")
+    next_page_url = url
+
+    # Keep fetching pages while there's a page to fetch
+    while next_page_url is not None:
+        response = requests.get(next_page_url, auth=HTTPBasicAuth(username, password))
+        if response.status_code != 200:
+            raise Exception(f"Request failed status_code='{response.status_code}' content='{response.content}'")
+        page_json = response.json()
+
+        action(page_json)
+
+        # Get the next page URL, if present
+        # It will include same query parameters, so no need to append them again
+        next_page_url = page_json.get('next', None)
+        logger.info("bitbucket_request: Next page")
+        nice_sleep()
+
+
+def repo_projects(project_details: dict, project_dir: str):
+    repos_url = project_details.get("links").get("repositories").get("href")
+    bitbucket_request(repos_url, lambda *args, into_dir=project_dir: repo(*args, into_dir))
+
+
+def repo(repo_details: dict, project_dir: str):
+    for repo_detail in repo_details.get("values", []):
+        clone_repo(repo_detail, project_dir)
+
+
+def clone_repo(repo_detail: dict, project_dir: str):
+    slug = repo_detail["slug"]
+    git_url = None
+    for link in repo_detail.get("links").get("clone"):
+        if link["name"] != "ssh":
+            continue
+        git_url = link["href"]
+    if git_url is None:
+        raise Exception(f"Repo '{slug}' does not have an ssh clone method!")
+    into_dir = f"{project_dir}/{slug}"
+
+    logger.info("Cloning '%s' into '%s'", git_url, into_dir)
+    if not isdir(into_dir):
+        subprocess.run(["git", "clone", git_url, into_dir])
+    else:
+        logger.info("Repo already exists, skipping")
+
+
+def main_projects():
+    logger.info("All repos: Running")
+    workspace = getenv("BITBUCKET_WORKSPACE")
+    projects = getenv("BITBUCKET_PROJECTS", "").split(",")
+    into_folder = getenv("HOME") + "/bitbucket-projects"
+
+    for project_key in projects:
+        logger.info("Looking at project '%s'", project_key)
+        project_dir = f"{into_folder}/{project_key}"
+        logger.info("Looking at project_dir='%s'", project_dir)
+
+        makedirs(project_dir, exist_ok=True)
+
+        # Request 100 repositories per page (and only their slugs), and the next page URL
+        url = f"https://api.bitbucket.org/2.0/workspaces/{workspace}/projects/{project_key}"
+
+        bitbucket_request(url, lambda *args, into_dir=project_dir: repo_projects(*args, into_dir))
+
+
+def main():
+    home_dir = getenv('HOME')
+    project_dir = realpath(dirname(realpath(__file__)) + "/..")
+    load_dotenv(dotenv_path=f"{project_dir}/.env")
+
+    logging.basicConfig(level=getenv("LOGLEVEL", "INFO"))
+    logger.info("home_dir='%s' project_dir='%s'", home_dir, project_dir)
+
+    main_projects()
+
+    logging.info("Done!")
+
+
+if __name__ == '__main__':
+    main()
