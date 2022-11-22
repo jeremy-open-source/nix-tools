@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+set -e
+
+pip-compile --no-annotate --no-emit-index-url --output-file requirements.txt requirements.in
