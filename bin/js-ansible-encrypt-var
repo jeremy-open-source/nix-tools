@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -e
+
+VAR_NAME=${1}
+VAR_VALUE=${2}
+
+if [[ -z "${VAR_NAME}" ]] ; then
+  read -r -p "VAR_NAME=" VAR_NAME
+fi
+if [[ -z "${VAR_VALUE}" ]] ; then
+  read -r -p "VAR_VALUE=" VAR_VALUE
+fi
+
+ansible-vault encrypt_string --vault-password-file vault-password.txt "${VAR_VALUE}" --name "${VAR_NAME}"

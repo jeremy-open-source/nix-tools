@@ -1,0 +1,13 @@
+##!/usr/bin/env bash
+#
+#set -e
+#
+#SECRET_VALUE=${1}
+#
+#if [[ -z "${SECRET_VALUE}" ]] ; then
+#  read -r -p "SECRET_VALUE=" SECRET_VALUE
+#fi
+#
+## echo ${SECRET_VALUE}
+#
+#echo "${SECRET_VALUE}" | ansible-vault decrypt --vault-password-file vault-password.txt && echo
