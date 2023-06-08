@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+set -e
+
+# https://askubuntu.com/questions/109530/how-do-i-restore-my-kde-desktop-to-default
+
+read -r -p "Are you sure? this is permanent! [y/N] " response
+case "$response" in [yY][eE][sS]|[yY])
+        rm ~/.config/plasmawindowed-appletsrc || true
+        rm ~/.config/plasma-org.kde.plasma.desktop-appletsrc
+        rm -rf ~/.kde || true
+#        rm ~/.config/plasmashellrc
+#        rm ~/.config/plasmarc
+#  ~/.local/share/kscreen
+        echo "INFO: Please 'reboot'"
+        ;;
+    *)
+        echo "Aborting! Bye"
+        ;;
+esac
+
+
+
+echo ""
