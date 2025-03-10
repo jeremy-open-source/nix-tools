@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 function wish_to_continue {
   read -p "Are you sure? ('yes' to continue)" -r CONTINUE

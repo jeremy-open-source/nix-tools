@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 
 # https://bugs.launchpad.net/ubuntu/+source/linux/+bug/1832988

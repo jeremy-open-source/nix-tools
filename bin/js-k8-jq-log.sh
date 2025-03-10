@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 JQ_ARGS=".message" # ".message,.onBehalfOf"
 if [[ "$2" ]]; then

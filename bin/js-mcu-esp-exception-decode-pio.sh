@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 # DOCKER_IMAGE="esp-stack-trace-decoder-docker_app:latest"
 DOCKER_IMAGE="registry.gitlab.com/mage-sauce/dockerization/esp-stack-trace-decoder-docker:latest"

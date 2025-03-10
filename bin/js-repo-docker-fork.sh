@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 # TODO: Would be nice to be able to get these from an API in the future
 declare -a TAGS=(

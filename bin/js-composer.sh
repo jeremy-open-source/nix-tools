@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 # Notes:
 # * This script is meant to be loaded from the root of a project

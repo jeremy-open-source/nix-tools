@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 TMP_FILE=$(mktemp --suffix ".jpg")
 OUT_FILE="$HOME/Desktop/screenshot-$(date +%Y%m%d%H%M%S).jpg"

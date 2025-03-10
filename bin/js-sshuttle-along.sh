@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 SERVER=${1:-""}
 if [[ -z "${SERVER}" ]] ; then

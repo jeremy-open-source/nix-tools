@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 INPUT_FILE="/dev/sdb"
 OUTPUT_FILE="$HOME/sdb-$(date +%s).gz"

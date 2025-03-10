@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 ADDITIONAL_MESSAGE=${1:-""}
 if [[ -z "${ADDITIONAL_MESSAGE}" ]] ; then

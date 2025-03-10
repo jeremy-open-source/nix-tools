@@ -1,6 +1,6 @@
 ##!/usr/bin/env bash
 #
-#set -e
+#set -eu -o pipefail
 #
 #SECRET_VALUE=${1}
 #

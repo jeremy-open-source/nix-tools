@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 #DRY_RUN="--dry-run"
 DATE="$(date +"%s-%Y%m%d-%H%M%S")"

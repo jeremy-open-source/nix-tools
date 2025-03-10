@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 # https://askubuntu.com/questions/109530/how-do-i-restore-my-kde-desktop-to-default
 

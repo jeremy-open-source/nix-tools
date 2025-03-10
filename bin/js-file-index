@@ -69,7 +69,7 @@ def update_missing(directory_to_scan: str, output_yaml_file: str) -> None:
     else:
         logger.info("No missing files found to add.")
 
-def find_duplicate_hashes(output_yaml_file: str) -> None:
+def find_duplicate_hashes(output_yaml_file: str) -> dict[str, list[str]]:
     existing_index = load_existing_index(output_yaml_file)
     hash_map = {}
     for file_info in existing_index:
@@ -79,23 +79,50 @@ def find_duplicate_hashes(output_yaml_file: str) -> None:
         else:
             hash_map[sha256_hash] = [file_info['folder'] + "/" + file_info['file']]
 
-    duplicates_found = False
-    for sha256_hash, paths in hash_map.items():
-        if len(paths) > 1:
-            duplicates_found = True
-            print(f"Hash: {sha256_hash}")
-            for path in paths:
-                print(f" -> {path}")
-            print("")
+    duplicates = {sha256_hash: paths for sha256_hash, paths in hash_map.items() if len(paths) > 1}
+    return duplicates
 
-    if not duplicates_found:
+def print_duplicate_hashes(duplicates: dict[str, list[str]]) -> None:
+    if not duplicates:
         print("No duplicate hashes found.")
+        return
+
+    for sha256_hash, paths in duplicates.items():
+        print(f"Hash: {sha256_hash}")
+        for path in paths:
+            print(f" -> {path}")
+
+def prompt_delete_duplicates(duplicates: dict[str, list[str]]) -> None:
+    if not duplicates:
+        print("No duplicate hashes found.")
+        return
+
+    for sha256_hash, paths in duplicates.items():
+        print(f"\nDuplicate files for hash: {sha256_hash}")
+        for i, path in enumerate(paths, 1):
+            print(f"[{i}] {path}")
+
+        while len(paths) > 1:
+            try:
+                to_delete = input(f"Choose a file number to delete or 'skip' to keep the rest: ")
+                if to_delete.lower() == 'skip':
+                    break
+                index = int(to_delete) - 1
+                if 0 <= index < len(paths):
+                    file_to_delete = paths.pop(index)
+                    os.remove(file_to_delete)
+                    print(f"Deleted: {file_to_delete}")
+                else:
+                    print("Invalid selection. Please try again.")
+            except (ValueError, IndexError):
+                print("Invalid input. Please enter a number corresponding to the file or 'skip'.")
 
 def main():
     parser = argparse.ArgumentParser(description="Manage file index with hashes")
     parser.add_argument('--create-index', action='store_true', help="Re-create the file index")
     parser.add_argument('--update-missing', action='store_true', help="Add missing files to the index")
     parser.add_argument('--duplicate-hashes', action='store_true', help="Find duplicate file hashes and print them")
+    parser.add_argument('--duplicate-hashes-prompt-delete', action='store_true', help="Prompt to delete duplicate files based on hashes")
 
     args = parser.parse_args()
 
@@ -108,9 +135,13 @@ def main():
     elif args.update_missing:
         update_missing(directory_to_scan, output_file)
     elif args.duplicate_hashes:
-        find_duplicate_hashes(output_file)
+        duplicates = find_duplicate_hashes(output_file)
+        print_duplicate_hashes(duplicates)
+    elif args.duplicate_hashes_prompt_delete:
+        duplicates = find_duplicate_hashes(output_file)
+        prompt_delete_duplicates(duplicates)
     else:
-        print("No action specified. Use --create-index, --update-missing, or --duplicate-hashes")
+        print("No action specified. Use --create-index, --update-missing, --duplicate-hashes, or --duplicate-hashes-prompt-delete")
 
 if __name__ == "__main__":
     main()

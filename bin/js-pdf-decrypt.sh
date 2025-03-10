@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 IN_FILE=${1}
 PASSWORD=${2}

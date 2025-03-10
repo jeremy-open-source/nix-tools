@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 DOCKER_IMAGE="registry.gitlab.com/mage-sauce/programs/ci-tools:develop"
 

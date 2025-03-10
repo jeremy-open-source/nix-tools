@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 JOB_ID=${1:-""}
 if [[ -z "${JOB_ID}" ]] ; then

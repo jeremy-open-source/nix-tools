@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 # Fixes issues with the KDE panel disappearing (had a couple of times in Kubuntu 21.04)
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu -o pipefail
 
 # https://docs.platformio.org/en/stable/core/quickstart.html
 echo "INFO: Use 'pio boards' for boards"
