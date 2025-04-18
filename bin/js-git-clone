@@ -31,7 +31,7 @@ fi
 
 # Open in IDE
 # echo "DEBUG: SKIP_ID_OPEN=${SKIP_ID_OPEN}"
-if [[ -z "${SKIP_ID_OPEN}" ]] ; then
+if [[ -z "${SKIP_ID_OPEN:-}" ]] ; then
   # echo "DEBUG: Asking for IDE open"
   read -r -p "Open in IDE (blank for no)? :" IDE_OPEN
   if [[ -n "${IDE_OPEN}" ]] ; then
