@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+
+IMAGE=registry.gitlab.com/jeremy-hub/personal/dockerization-private/ltchiptool:latest
+
+docker pull ${IMAGE}
+docker run \
+  --rm \
+  -it \
+  --name "ltchiptool" \
+  --env HPWD="${PWD}" \
+  --volume "${PWD}":"${PWD}" \
+  --volume /home/hermitz/repos/gitlab.com/jeremy-hub/personal/device-firmware:/data \
+  --device "/dev/ttyUSB0:/dev/ttyUSB0" \
+  --network=host \
+  ${IMAGE} \
+  bash
