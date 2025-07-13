@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+
+# Allow Docker to access the X server
+xhost +local:docker > /dev/null
+
+IMAGE=registry.gitlab.com/jeremy-hub/personal/dockerization-private/ltchiptool:latest
+
+docker pull ${IMAGE}
+docker run \
+  --rm \
+  -it \
+  --name "ltchiptool" \
+  --env HPWD="${PWD}" \
+  --env DISPLAY="${DISPLAY}" \
+  --env GDK_BACKEND=x11 \
+  --volume /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  --volume "${PWD}":"${PWD}" \
+  --volume /home/hermitz/repos/gitlab.com/jeremy-hub/personal/device-firmware:/data \
+  --device "/dev/ttyUSB0:/dev/ttyUSB0" \
+  --network=host \
+  ${IMAGE}
