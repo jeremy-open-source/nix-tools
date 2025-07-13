@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+
+IMAGE=registry.gitlab.com/jeremy-hub/personal/dockerization-private/esptool:latest
+
+docker pull ${IMAGE}
+docker run \
+  --rm \
+  -it \
+  --name "esptool" \
+  --env HPWD="${PWD}" \
+  --volume "${PWD}":"${PWD}" \
+  --volume "${HOME}/repos/gitlab.com/jeremy-hub/personal/device-firmware:/data" \
+  --device "/dev/ttyUSB0:/dev/ttyUSB0" \
+  --network=host \
+  ${IMAGE} \
+  bash
