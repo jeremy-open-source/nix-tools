@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+
+# https://superuser.com/questions/17312/restart-ubuntu-sound-processes-via-command-line
+systemctl --user restart pulseaudio
