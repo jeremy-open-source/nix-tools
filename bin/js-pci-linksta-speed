@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+
+# Note: run as sudo
+# Displays each PCIe card and its speed
+
+sudo bash -lc '
+for d in $(lspci -D | awk "{print \$1}"); do
+  sta=$(lspci -vv -s "$d" 2>/dev/null | grep -m1 "LnkSta:")
+  if [ -n "$sta" ]; then
+    echo "=== $d $(lspci -s "$d" | cut -d" " -f2-)"
+    echo "    $sta"
+  fi
+done
+'
