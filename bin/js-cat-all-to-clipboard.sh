@@ -16,8 +16,9 @@ OUTPUT=""
 IGNORE_EXTENSIONS=("log" "lock" "bin" "exe" "png" "jpg" "zip" "gz" "stl" "step")
 # Add folder names to skip entirely during file discovery
 IGNORE_FOLDERS=(".git" ".terraform" ".vagrant" ".idea")
-# Add exact filenames to skip entirely during file discovery
-IGNORE_FILES=(".DS_Store" "kubeconfig.yml" "terraform.tfstate" "terraform.tfstate.backup" ".terraform.lock.hcl")
+# Add filename patterns to skip entirely during file discovery (supports globs)
+# Examples: "terraform.tfstate*", ".*"
+IGNORE_FILE_PATTERNS=(".DS_Store" "kubeconfig.yml" "terraform.tfstate*" ".terraform.lock.hcl")
 # ==============================================================================
 
 # Returns success if file extension is in IGNORE_EXTENSIONS
@@ -50,9 +51,9 @@ for folder in "${IGNORE_FOLDERS[@]}"; do
   FIND_PRUNE_EXPR+=(-name "$folder")
 done
 
-# Build a safe dynamic find expression for ignored files
+# Build a safe dynamic find expression for ignored files (pattern-based)
 FIND_FILE_IGNORE_EXPR=()
-for ignored_file in "${IGNORE_FILES[@]}"; do
+for ignored_file in "${IGNORE_FILE_PATTERNS[@]}"; do
   if ((${#FIND_FILE_IGNORE_EXPR[@]})); then
     FIND_FILE_IGNORE_EXPR+=(-o)
   fi
