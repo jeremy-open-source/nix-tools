@@ -16,6 +16,8 @@ OUTPUT=""
 IGNORE_EXTENSIONS=("log" "lock" "bin" "exe" "png" "jpg" "zip" "gz" "stl" "step")
 # Add folder names to skip entirely during file discovery
 IGNORE_FOLDERS=(".git" ".terraform" ".vagrant" ".idea")
+# Add exact filenames to skip entirely during file discovery
+IGNORE_FILES=(".DS_Store" "kubeconfig.yml" "terraform.tfstate" "terraform.tfstate.backup" ".terraform.lock.hcl")
 # ==============================================================================
 
 # Returns success if file extension is in IGNORE_EXTENSIONS
@@ -48,6 +50,20 @@ for folder in "${IGNORE_FOLDERS[@]}"; do
   FIND_PRUNE_EXPR+=(-name "$folder")
 done
 
+# Build a safe dynamic find expression for ignored files
+FIND_FILE_IGNORE_EXPR=()
+for ignored_file in "${IGNORE_FILES[@]}"; do
+  if ((${#FIND_FILE_IGNORE_EXPR[@]})); then
+    FIND_FILE_IGNORE_EXPR+=(-o)
+  fi
+  FIND_FILE_IGNORE_EXPR+=(-name "$ignored_file")
+done
+
+FIND_FILE_FILTER=()
+if ((${#FIND_FILE_IGNORE_EXPR[@]})); then
+  FIND_FILE_FILTER=( ! \( "${FIND_FILE_IGNORE_EXPR[@]}" \) )
+fi
+
 while IFS= read -r -d '' FILE; do
   # 1. If file matches ignored extension, mark as "(contents ignored)"
   if is_ignored_extension "$FILE"; then
@@ -67,7 +83,7 @@ while IFS= read -r -d '' FILE; do
 done < <(
   find "$DIR" \
     \( -type d \( "${FIND_PRUNE_EXPR[@]}" \) -prune \) -o \
-    -type f -print0
+    -type f "${FIND_FILE_FILTER[@]}" -print0
 )
 
 # Copy to clipboard using xclip (requires `xclip` to be installed)
