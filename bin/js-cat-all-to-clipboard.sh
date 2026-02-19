@@ -14,22 +14,44 @@ OUTPUT=""
 # === CONFIGURATION ============================================================
 # Add extensions (without the dot) to this list to ignore contents but still show the file path
 IGNORE_EXTENSIONS=("log" "lock" "bin" "exe" "png" "jpg" "zip" "gz" "stl" "step")
+# Add folder names to skip entirely during file discovery
+IGNORE_FOLDERS=(".git" ".terraform" ".vagrant" ".idea")
 # ==============================================================================
 
-# Convert the ignore list to a lookup-friendly pattern
-IGNORE_PATTERN="\\."
-for ext in "${IGNORE_EXTENSIONS[@]}"; do
-  IGNORE_PATTERN+="(${ext})|"
-done
-IGNORE_PATTERN="${IGNORE_PATTERN%|}" # Remove trailing '|'
+# Returns success if file extension is in IGNORE_EXTENSIONS
+is_ignored_extension() {
+  local file_basename="${1##*/}"
+  local file_ext="${file_basename##*.}"
+
+  # No dot/no extension
+  if [[ "$file_basename" == "$file_ext" ]]; then
+    return 1
+  fi
+
+  local ext
+  for ext in "${IGNORE_EXTENSIONS[@]}"; do
+    if [[ "$file_ext" == "$ext" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
 
 # Process files
-while IFS= read -r -d '' FILE; do
-  BASENAME=$(basename "$FILE")
+# Build a safe dynamic find expression for ignored folders
+FIND_PRUNE_EXPR=()
+for folder in "${IGNORE_FOLDERS[@]}"; do
+  if ((${#FIND_PRUNE_EXPR[@]})); then
+    FIND_PRUNE_EXPR+=(-o)
+  fi
+  FIND_PRUNE_EXPR+=(-name "$folder")
+done
 
+while IFS= read -r -d '' FILE; do
   # 1. If file matches ignored extension, mark as "(contents ignored)"
-  if [[ "$BASENAME" =~ $IGNORE_PATTERN$ ]]; then
-    OUTPUT+="${FILE}\n\`\`\`\n(contents ignored)\n\`\`\`\n\n"
+  if is_ignored_extension "$FILE"; then
+    printf -v OUTPUT '%s%s\n```\n(contents ignored)\n```\n\n' "$OUTPUT" "$FILE"
     continue
   fi
 
@@ -37,19 +59,18 @@ while IFS= read -r -d '' FILE; do
   MIME_TYPE=$(file --mime-type -b "$FILE")
 
   if [[ "$MIME_TYPE" == text/* ]]; then
-    # Normal text file, include contents
-    OUTPUT+="${FILE}\n\`\`\`\n$(cat "$FILE")\n\`\`\`\n\n"
+    printf -v OUTPUT '%s%s\n```\n%s\n```\n\n' "$OUTPUT" "$FILE" "$(cat "$FILE")"
   else
-    # Non-text file, show a placeholder
-    OUTPUT+="${FILE}\n\`\`\`\n(binary file ignored)\n\`\`\`\n\n"
+    printf -v OUTPUT '%s%s\n```\n(binary file ignored)\n```\n\n' "$OUTPUT" "$FILE"
   fi
+
 done < <(
   find "$DIR" \
-    \( -name '.git' -o -name '.idea' -o -name '.vagrant' \) -type d -prune -o \
+    \( -type d \( "${FIND_PRUNE_EXPR[@]}" \) -prune \) -o \
     -type f -print0
 )
 
 # Copy to clipboard using xclip (requires `xclip` to be installed)
-echo -e "$OUTPUT" | xclip -selection clipboard
+printf '%s' "$OUTPUT" | xclip -selection clipboard
 
 echo "✅ All files processed. Ignored and binary files marked appropriately."
