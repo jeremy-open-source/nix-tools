@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# erase-esp-flash.sh
+# Usage:
+#   ./erase-esp-flash.sh                # auto-pick a likely port
+#   ./erase-esp-flash.sh /dev/ttyUSB0   # specify port explicitly
+#   ./erase-esp-flash.sh /dev/ttyACM0 115200  # specify port + baud
+
+PORT="${1:-}"
+BAUD="${2:-115200}"
+
+pick_port() {
+  # Common ESP serial device patterns on Linux
+  local candidates=()
+  for p in /dev/ttyUSB* /dev/ttyACM* /dev/serial/by-id/*; do
+    [[ -e "$p" ]] && candidates+=("$p")
+  done
+
+  if [[ ${#candidates[@]} -eq 0 ]]; then
+    echo "No serial devices found under /dev/ttyUSB*, /dev/ttyACM*, or /dev/serial/by-id/." >&2
+    echo "Plug the ESP in, or pass the port explicitly (e.g. /dev/ttyUSB0)." >&2
+    exit 1
+  fi
+
+  # Prefer /dev/serial/by-id if present (more stable)
+  for c in "${candidates[@]}"; do
+    if [[ "$c" == /dev/serial/by-id/* ]]; then
+      echo "$c"
+      return 0
+    fi
+  done
+
+  # Otherwise pick the first ttyUSB/ttyACM
+  echo "${candidates[0]}"
+}
+
+require_esptool() {
+  if command -v esptool >/dev/null 2>&1; then
+      echo "esptool"
+  elif command -v esptool.py >/dev/null 2>&1; then
+    echo "esptool.py"
+  else
+    echo "Error: esptool not found. Install with: pipx install esptool (or pip install esptool)" >&2
+    exit 1
+  fi
+}
+
+if [[ -z "$PORT" ]]; then
+  PORT="$(pick_port)"
+fi
+
+if [[ ! -e "$PORT" ]]; then
+  echo "Error: Port '$PORT' does not exist." >&2
+  exit 1
+fi
+
+ESPTOOL_BIN="$(require_esptool)"
+
+echo "About to ERASE FLASH on: $PORT"
+echo "This will wipe firmware + settings. (WLED configs will be gone, etc.)"
+echo
+read -r -p "Type ERASE to continue (anything else cancels): " CONFIRM
+
+if [[ "$CONFIRM" != "ERASE" ]]; then
+  echo "Cancelled."
+  exit 0
+fi
+
+echo
+echo "Running: $ESPTOOL_BIN --port \"$PORT\" --baud \"$BAUD\" erase_flash"
+echo
+
+# Some boards need DTR/RTS auto-reset; esptool will try.
+# If it fails, you may need to hold BOOT while starting, then release.
+"$ESPTOOL_BIN" --port "$PORT" --baud "$BAUD" erase_flash
+
+echo
+echo "Done. Flash erased."
