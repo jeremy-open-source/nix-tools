@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+
+# This script calculates the average GPU power draw over a specified number of samples.
+# Default is 60 samples (approx. 60 seconds if -l 1 is used).
+
+SAMPLES=${1:-60}
+
+echo "Taking $SAMPLES samples..."
+
+nvidia-smi --query-gpu=power.draw --format=csv,noheader,nounits -l 1 | \
+awk -v total_samples="$SAMPLES" '
+{ 
+    sum += $1; 
+    count++ 
+} 
+count == total_samples { 
+    print "Average:", sum/count, "W"; 
+    exit 
+}'

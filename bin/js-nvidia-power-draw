@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+
+# This script monitors the GPU power draw in real-time (1s intervals).
+# It displays the power consumption in Watts, one value per line.
+
+echo "Starting GPU power monitoring (Ctrl+C to stop)..."
+
+nvidia-smi --query-gpu=power.draw --format=csv,noheader,nounits -l 1
