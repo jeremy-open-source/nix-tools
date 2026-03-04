@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+
+if ! git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+  echo "Error: Not inside a git repository" >&2
+  exit 1
+fi
+
+git_root="$(cd "$git_root" && pwd -P)"
+current_dir="$(pwd -P)"
+if [[ "$current_dir" == "$git_root" ]]; then
+  rel_dir=""
+else
+  rel_dir="${current_dir#"$git_root"/}"
+  if [[ "$rel_dir" == "$current_dir" ]]; then
+    echo "Error: Current directory is outside git root: $git_root" >&2
+    exit 1
+  fi
+fi
+
+module_prefix="//"
+if [[ -n "$rel_dir" ]]; then
+  module_prefix+="$rel_dir"
+fi
+
+target_selector="..."
+if [[ $# -gt 0 && "$1" != -* ]]; then
+  target_selector="$1"
+  shift
+fi
+
+case "$target_selector" in
+  //*)
+    bazel_target="$target_selector"
+    ;;
+  ...)
+    if [[ -n "$rel_dir" ]]; then
+      bazel_target="${module_prefix}/..."
+    else
+      bazel_target="//..."
+    fi
+    ;;
+  :*)
+    bazel_target="${module_prefix}${target_selector}"
+    ;;
+  *)
+    bazel_target="${module_prefix}:${target_selector}"
+    ;;
+esac
+
+cmd=(bazel test "$bazel_target" "$@")
+printf 'INFO: Running'
+printf ' %q' "${cmd[@]}"
+printf '\n'
+
+exec "${cmd[@]}"
