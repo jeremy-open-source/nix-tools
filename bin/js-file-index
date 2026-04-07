@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
 
 """
-Script(s) to index a directory.
-Use cases:
--> Find duplicate files by hash
--> Remove duplicate files
+Build YAML file indexes for directories, detect duplicate content, and compare
+one index against another.
+
+Common use cases:
+- Create an index for an unsorted photo import.
+- Create an index for a NAS photo library.
+- Compare the two indexes to confirm every imported photo exists in the NAS,
+  even if the destination folders are different.
+
+Examples:
+    js-file-index --create-index --directory /photos/import --output-file import.yml
+    js-file-index --create-index --directory /mnt/nas/photos --output-file nas.yml
+    js-file-index --compare-indexes --output-file nas.yml --other-index import.yml
+    js-file-index --compare-indexes --output-file nas.yml --other-index import.yml --match-name
 """
 
 import os
@@ -26,7 +36,17 @@ DEFAULT_OUTPUT_FILE = "js_file_index.yml"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Manage file index with hashes")
+    parser = argparse.ArgumentParser(
+        description="Manage file indexes with SHA-256 hashes.",
+        epilog=(
+            "Examples:\n"
+            "  js-file-index --create-index --directory /photos/import --output-file import.yml\n"
+            "  js-file-index --create-index --directory /mnt/nas/photos --output-file nas.yml\n"
+            "  js-file-index --compare-indexes --output-file nas.yml --other-index import.yml\n"
+            "  js-file-index --compare-indexes --output-file nas.yml --other-index import.yml --match-name"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     action_group = parser.add_mutually_exclusive_group(required=True)
     action_group.add_argument("--create-index", action="store_true", help="Re-create the file index")
     action_group.add_argument("--add-missing", action="store_true", help="Add missing files to the index")
