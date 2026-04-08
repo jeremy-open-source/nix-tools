@@ -7,11 +7,18 @@ one index against another.
 Common use cases:
 - Create an index for an unsorted photo import.
 - Create an index for a NAS photo library.
+- Refresh an existing index after moving, deleting, and adding files.
 - Compare the two indexes to confirm every imported photo exists in the NAS,
   even if the destination folders are different.
 
+Refresh behavior:
+- Keep existing index entries when the file path still exists.
+- Remove index entries when the file path no longer exists.
+- Hash only newly discovered paths.
+
 Examples:
     js-file-index --create-index --directory /photos/import --output-file import.yml
+    js-file-index --refresh-index --directory /photos/import --output-file import.yml
     js-file-index --create-index --directory /mnt/nas/photos --output-file nas.yml
     js-file-index --compare-indexes --output-file nas.yml --other-index import.yml
     js-file-index --compare-indexes --output-file nas.yml --other-index import.yml --match-name
@@ -41,6 +48,7 @@ def parse_args() -> argparse.Namespace:
         epilog=(
             "Examples:\n"
             "  js-file-index --create-index --directory /photos/import --output-file import.yml\n"
+            "  js-file-index --refresh-index --directory /photos/import --output-file import.yml\n"
             "  js-file-index --create-index --directory /mnt/nas/photos --output-file nas.yml\n"
             "  js-file-index --compare-indexes --output-file nas.yml --other-index import.yml\n"
             "  js-file-index --compare-indexes --output-file nas.yml --other-index import.yml --match-name"
@@ -50,6 +58,11 @@ def parse_args() -> argparse.Namespace:
     action_group = parser.add_mutually_exclusive_group(required=True)
     action_group.add_argument("--create-index", action="store_true", help="Re-create the file index")
     action_group.add_argument("--add-missing", action="store_true", help="Add missing files to the index")
+    action_group.add_argument(
+        "--refresh-index",
+        action="store_true",
+        help="Add new files and remove entries whose files no longer exist",
+    )
     action_group.add_argument(
         "--duplicate-hashes",
         action="store_true",
@@ -352,6 +365,70 @@ def add_missing(directory_to_scan: str, output_yaml_file: str) -> None:
         logger.info("No missing files found to add.")
 
 
+def iter_directory_file_paths(directory_to_scan: str, output_yaml_file: str) -> set[str]:
+    current_paths: set[str] = set()
+    output_abs = os.path.abspath(output_yaml_file)
+
+    for root, dirs, files in os.walk(directory_to_scan):
+        dirs.sort()
+        files.sort()
+
+        for file in files:
+            file_path = os.path.join(root, file)
+            abs_file_path = os.path.abspath(file_path)
+
+            if abs_file_path == output_abs:
+                continue
+
+            if not os.path.isfile(file_path):
+                continue
+
+            current_paths.add(abs_file_path)
+
+    return current_paths
+
+
+def refresh_index(directory_to_scan: str, output_yaml_file: str) -> None:
+    existing_index = load_existing_index(output_yaml_file)
+    existing_contents = existing_index["contents"]
+    existing_by_path = {
+        file_info.get("path") or os.path.join(file_info["folder"], file_info["file"]): file_info
+        for file_info in existing_contents
+    }
+
+    current_paths = iter_directory_file_paths(directory_to_scan, output_yaml_file)
+
+    kept_contents: list[dict[str, Any]] = []
+    removed_count = 0
+    for path, file_info in existing_by_path.items():
+        if path in current_paths:
+            kept_contents.append(file_info)
+        else:
+            removed_count += 1
+
+    new_files_data: list[dict[str, Any]] = []
+    for path in sorted(current_paths):
+        if path in existing_by_path:
+            continue
+
+        logger.info("Adding new file %s", path)
+        new_files_data.append(get_file_info(path))
+
+    refreshed_contents = kept_contents + new_files_data
+    refreshed_payload = build_index_payload(refreshed_contents)
+
+    with open(output_yaml_file, "w", encoding="utf-8") as yaml_file:
+        yaml.safe_dump(refreshed_payload, yaml_file, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+    logger.info(
+        "Index refreshed in %s. Kept %s existing entries, added %s new files, removed %s missing entries.",
+        output_yaml_file,
+        len(kept_contents),
+        len(new_files_data),
+        removed_count,
+    )
+
+
 def find_duplicate_hashes(output_yaml_file: str) -> dict[str, list[str]]:
     existing_index = load_existing_index(output_yaml_file)
     existing_contents = existing_index["contents"]
@@ -495,6 +572,9 @@ def main() -> None:
         elif args.add_missing:
             validate_paths(directory_to_scan, output_file)
             add_missing(directory_to_scan, output_file)
+        elif args.refresh_index:
+            validate_paths(directory_to_scan, output_file)
+            refresh_index(directory_to_scan, output_file)
         elif args.duplicate_hashes:
             validate_existing_file(output_file, "Index file")
             duplicates = find_duplicate_hashes(output_file)
