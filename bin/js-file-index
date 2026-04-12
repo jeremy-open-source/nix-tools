@@ -4,6 +4,16 @@
 Build YAML file indexes for directories, detect duplicate content, and compare
 one index against another.
 
+Design notes:
+- `get_file_info()` is the low-level collection step that reads file details and
+  stores them in the YAML index with minimal calculation.
+- The YAML index is intended to reduce repeated heavy file operations such as
+  hashing and metadata extraction.
+- Higher-level business logic should be derived from `FileInfo` at read time
+  instead of being persisted back into the index when avoidable.
+- If a new use case needs more interpretation, add that on top of `FileInfo`
+  rather than expanding the stored index with calculated fields.
+
 Common use cases:
 - Create an index for an unsorted photo import.
 - Create an index for a NAS photo library.
@@ -33,13 +43,80 @@ import mimetypes
 import subprocess
 import json
 import shutil
+import re
 from datetime import datetime
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 logger = logging.getLogger(__name__)
 
 INDEX_VERSION = "2"
 DEFAULT_OUTPUT_FILE = "js_file_index.yml"
+MEDIA_DATE_FORMATS = (
+    "%Y:%m:%d %H:%M:%S%z",
+    "%Y:%m:%d %H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S.%f%z",
+    "%Y-%m-%dT%H:%M:%S%z",
+    "%Y-%m-%dT%H:%M:%S.%f",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d %H:%M:%S.%f%z",
+    "%Y-%m-%d %H:%M:%S%z",
+    "%Y-%m-%d %H:%M:%S.%f",
+    "%Y-%m-%d %H:%M:%S",
+)
+PREFERRED_MEDIA_DATE_KEYS = (
+    "SubSecDateTimeOriginal",
+    "DateTimeOriginal",
+    "CreationDate",
+    "CreateDate",
+    "MediaCreateDate",
+    "TrackCreateDate",
+    "DateCreated",
+    "ModifyDate",
+    "MediaModifyDate",
+)
+FILENAME_DATE_PATTERNS = (
+    re.compile(r"(?<!\d)(\d{8})[_-](\d{6})(?!\d)"),
+    re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})[_-](\d{2})-(\d{2})-(\d{2})(?!\d)"),
+    re.compile(r"(?<!\d)(\d{8})(?!\d)"),
+    re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)"),
+)
+
+
+class FileInfo(TypedDict):
+    file: str
+    folder: str
+    path: str
+    sha256_hash: str
+    date_last_modified: str
+    date_created: str | None
+    date_last_accessed: str
+    size: int
+    size_human: str
+    extension: str | None
+    mime_type: str | None
+    is_symlink: bool
+    exif: NotRequired[dict[str, Any]]
+
+
+class IndexPayload(TypedDict):
+    version: str
+    generated_at: str
+    contents: list[FileInfo]
+
+
+class FileMediaDateInfo(TypedDict):
+    media_date: str | None
+    media_date_source: str | None
+
+
+class IncorrectDateFolderInfo(TypedDict):
+    file: str
+    folder: str
+    path: str
+    media_date: str | None
+    media_date_source: str | None
+    actual_relative_folder: str | None
+    expected_relative_folder: str | None
 
 
 def parse_args() -> argparse.Namespace:
@@ -77,6 +154,11 @@ def parse_args() -> argparse.Namespace:
         "--compare-indexes",
         action="store_true",
         help="Check whether every file in --other-index exists in --output-file by hash",
+    )
+    action_group.add_argument(
+        "--identify-incorrect-date-folders",
+        action="store_true",
+        help="Read the existing index and print files whose folder does not match metadata-derived YYYY/YYYY-mm",
     )
     parser.add_argument(
         "--directory",
@@ -209,17 +291,114 @@ def get_date_created(file_path: str) -> str | None:
     return None
 
 
-def get_file_info(file_path: str) -> dict[str, Any]:
+
+def parse_media_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+
+    candidate = value.strip()
+    if not candidate:
+        return None
+
+    if len(candidate) > 6 and candidate[-6] in ["+", "-"] and candidate[-3] == ":":
+        compact_offset = candidate[:-6] + candidate[-6:-3] + candidate[-2:]
+    else:
+        compact_offset = candidate
+
+    for date_format in MEDIA_DATE_FORMATS:
+        try:
+            return datetime.strptime(compact_offset, date_format)
+        except ValueError:
+            continue
+
+    return None
+
+
+def parse_media_datetime_from_filename(file_name: str) -> datetime | None:
+    for pattern in FILENAME_DATE_PATTERNS:
+        match = pattern.search(file_name)
+        if not match:
+            continue
+
+        parts = match.groups()
+        try:
+            if len(parts) == 2:
+                return datetime.strptime("".join(parts), "%Y%m%d%H%M%S")
+            if len(parts) == 6:
+                return datetime.strptime("".join(parts), "%Y%m%d%H%M%S")
+            if len(parts) == 1:
+                return datetime.strptime(parts[0], "%Y%m%d")
+            if len(parts) == 3:
+                return datetime.strptime("".join(parts), "%Y%m%d")
+        except ValueError:
+            continue
+
+    return None
+
+
+def resolve_media_date(file_info: FileInfo) -> FileMediaDateInfo:
+    parsed_filename_date = parse_media_datetime_from_filename(file_info["file"])
+    if parsed_filename_date is not None:
+        return FileMediaDateInfo(
+            media_date=parsed_filename_date.isoformat(),
+            media_date_source="filename",
+        )
+
+    exif_data = file_info.get("exif", {})
+    for key in PREFERRED_MEDIA_DATE_KEYS:
+        parsed = parse_media_datetime(exif_data.get(key))
+        if parsed is not None:
+            return FileMediaDateInfo(
+                media_date=parsed.isoformat(),
+                media_date_source=f"exif.{key}",
+            )
+
+    parsed_created = parse_media_datetime(file_info["date_created"])
+    if parsed_created is not None:
+        return FileMediaDateInfo(
+            media_date=parsed_created.isoformat(),
+            media_date_source="filesystem.date_created",
+        )
+
+    return FileMediaDateInfo(
+        media_date=file_info["date_last_modified"],
+        media_date_source="filesystem.date_last_modified",
+    )
+
+
+def build_expected_relative_folder(media_date: str | None) -> str | None:
+    if not media_date:
+        return None
+
+    parsed = parse_media_datetime(media_date)
+    if parsed is None:
+        return None
+
+    return f"{parsed:%Y}/{parsed:%Y-%m}"
+
+
+def actual_relative_folder_suffix(folder_path: str) -> str | None:
+    normalized = os.path.normpath(folder_path)
+    parts = normalized.split(os.sep)
+    if len(parts) < 2:
+        return None
+
+    return "/".join(parts[-2:])
+
+
+def get_file_info(file_path: str) -> FileInfo:
     file_stats = os.stat(file_path)
     abs_path = os.path.abspath(file_path)
+    date_created = get_date_created(file_path)
+    exif_data = get_exif_metadata(file_path)
 
-    info: dict[str, Any] = {
+    info: FileInfo = {
         "file": os.path.basename(file_path),
         "folder": os.path.dirname(abs_path),
         "path": abs_path,
         "sha256_hash": calculate_sha256(file_path),
         "date_last_modified": datetime.fromtimestamp(file_stats.st_mtime).isoformat(),
-        "date_created": get_date_created(file_path),
+        "date_created": date_created,
         "date_last_accessed": datetime.fromtimestamp(file_stats.st_atime).isoformat(),
         "size": file_stats.st_size,
         "size_human": human_size(file_stats.st_size),
@@ -228,14 +407,13 @@ def get_file_info(file_path: str) -> dict[str, Any]:
         "is_symlink": os.path.islink(file_path),
     }
 
-    exif_data = get_exif_metadata(file_path)
     if exif_data:
         info["exif"] = exif_data
 
     return info
 
 
-def validate_loaded_index(data: Any) -> dict[str, Any]:
+def validate_loaded_index(data: Any) -> IndexPayload:
     if not isinstance(data, dict):
         raise ValueError(
             f"Unsupported index format in YAML. Expected a mapping with keys "
@@ -261,7 +439,7 @@ def validate_loaded_index(data: Any) -> dict[str, Any]:
     return data
 
 
-def load_existing_index(file_path: str) -> dict[str, Any]:
+def load_existing_index(file_path: str) -> IndexPayload:
     if not os.path.exists(file_path):
         return {
             "version": INDEX_VERSION,
@@ -278,8 +456,8 @@ def load_existing_index(file_path: str) -> dict[str, Any]:
     return validate_loaded_index(raw)
 
 
-def generate_hash_for_directory(directory_path: str, output_yaml_file: str) -> list[dict[str, Any]]:
-    files_data = []
+def generate_hash_for_directory(directory_path: str, output_yaml_file: str) -> list[FileInfo]:
+    files_data: list[FileInfo] = []
 
     output_abs = os.path.abspath(output_yaml_file)
 
@@ -305,7 +483,7 @@ def generate_hash_for_directory(directory_path: str, output_yaml_file: str) -> l
     return files_data
 
 
-def build_index_payload(contents: list[dict[str, Any]]) -> dict[str, Any]:
+def build_index_payload(contents: list[FileInfo]) -> IndexPayload:
     return {
         "version": INDEX_VERSION,
         "generated_at": datetime.now().isoformat(),
@@ -328,12 +506,9 @@ def add_missing(directory_to_scan: str, output_yaml_file: str) -> None:
     existing_contents = existing_index["contents"]
 
     # Use path as the unique key rather than just filename
-    existing_files = {
-        file_info.get("path") or os.path.join(file_info["folder"], file_info["file"]): file_info
-        for file_info in existing_contents
-    }
+    existing_files = {file_info["path"]: file_info for file_info in existing_contents}
 
-    new_files_data = []
+    new_files_data: list[FileInfo] = []
 
     output_abs = os.path.abspath(output_yaml_file)
 
@@ -391,14 +566,11 @@ def iter_directory_file_paths(directory_to_scan: str, output_yaml_file: str) -> 
 def refresh_index(directory_to_scan: str, output_yaml_file: str) -> None:
     existing_index = load_existing_index(output_yaml_file)
     existing_contents = existing_index["contents"]
-    existing_by_path = {
-        file_info.get("path") or os.path.join(file_info["folder"], file_info["file"]): file_info
-        for file_info in existing_contents
-    }
+    existing_by_path = {file_info["path"]: file_info for file_info in existing_contents}
 
     current_paths = iter_directory_file_paths(directory_to_scan, output_yaml_file)
 
-    kept_contents: list[dict[str, Any]] = []
+    kept_contents: list[FileInfo] = []
     removed_count = 0
     for path, file_info in existing_by_path.items():
         if path in current_paths:
@@ -406,7 +578,7 @@ def refresh_index(directory_to_scan: str, output_yaml_file: str) -> None:
         else:
             removed_count += 1
 
-    new_files_data: list[dict[str, Any]] = []
+    new_files_data: list[FileInfo] = []
     for path in sorted(current_paths):
         if path in existing_by_path:
             continue
@@ -436,7 +608,7 @@ def find_duplicate_hashes(output_yaml_file: str) -> dict[str, list[str]]:
     hash_map: dict[str, list[str]] = {}
     for file_info in existing_contents:
         sha256_hash = file_info["sha256_hash"]
-        path = file_info.get("path") or os.path.join(file_info["folder"], file_info["file"])
+        path = file_info["path"]
 
         if sha256_hash in hash_map:
             hash_map[sha256_hash].append(path)
@@ -489,7 +661,7 @@ def prompt_delete_duplicates(duplicates: dict[str, list[str]]) -> None:
                 print(f"Failed to delete file: {exc}")
 
 
-def build_hash_name_lookup(index_contents: list[dict[str, Any]]) -> dict[str, set[str]]:
+def build_hash_name_lookup(index_contents: list[FileInfo]) -> dict[str, set[str]]:
     lookup: dict[str, set[str]] = {}
     for file_info in index_contents:
         sha256_hash = file_info["sha256_hash"]
@@ -556,6 +728,53 @@ def compare_indexes(output_yaml_file: str, other_index_file: str, match_name: bo
     return not missing_hashes and (not match_name or not name_mismatches)
 
 
+def print_incorrect_date_folder(file_info: IncorrectDateFolderInfo) -> None:
+    print(f"\n- file: {file_info['file']}")
+    print(f"  folder: {file_info['folder']}")
+    print(f"  path: {file_info['path']}")
+    print(f"  media_date: {file_info['media_date']}")
+    print(f"  media_date_source: {file_info['media_date_source']}")
+    print(f"  actual_relative_folder: {file_info['actual_relative_folder']}")
+    print(f"  expected_relative_folder: {file_info['expected_relative_folder']}")
+
+
+def identify_incorrect_date_folders(output_yaml_file: str) -> int:
+    incorrect_count = 0
+    existing_index = load_existing_index(output_yaml_file)
+
+    for file_info in existing_index["contents"]:
+        media_date_info = resolve_media_date(file_info)
+        expected_relative_folder = build_expected_relative_folder(media_date_info["media_date"])
+        actual_relative_folder = actual_relative_folder_suffix(file_info["folder"])
+
+        if expected_relative_folder is None:
+            path = file_info["path"]
+            logger.warning("Skipping %s because no metadata date could be derived from the index", path)
+            continue
+
+        if actual_relative_folder != expected_relative_folder:
+            enriched_file_info: IncorrectDateFolderInfo = {
+                "file": file_info["file"],
+                "folder": file_info["folder"],
+                "path": file_info["path"],
+                "media_date": media_date_info["media_date"],
+                "media_date_source": media_date_info["media_date_source"],
+                "expected_relative_folder": expected_relative_folder,
+                "actual_relative_folder": actual_relative_folder,
+            }
+            if incorrect_count == 0:
+                print("Files in the wrong YYYY/YYYY-mm folder:")
+            print_incorrect_date_folder(enriched_file_info)
+            incorrect_count += 1
+
+    if incorrect_count == 0:
+        print("All scanned files are in the correct YYYY/YYYY-mm folder.")
+    else:
+        print(f"\nTotal incorrect date folders: {incorrect_count}")
+
+    return incorrect_count
+
+
 def main() -> None:
     args = parse_args()
 
@@ -589,6 +808,11 @@ def main() -> None:
             validate_existing_file(other_index_file, "Comparison index file")
             success = compare_indexes(output_file, other_index_file, args.match_name)
             if not success:
+                raise SystemExit(1)
+        elif args.identify_incorrect_date_folders:
+            validate_existing_file(output_file, "Index file")
+            incorrect_count = identify_incorrect_date_folders(output_file)
+            if incorrect_count:
                 raise SystemExit(1)
     except ValueError as exc:
         logger.error(str(exc))
