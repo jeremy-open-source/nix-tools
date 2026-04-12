@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+commit=false
+
+usage() {
+  cat <<'EOF'
+Usage: js-sort-immediate-files-by-created-year [--commit]
+
+Sort immediate files in the current directory into folders named by created year.
+
+By default this is a dry run. Use --commit to apply the moves.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --commit)
+      commit=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+for file in *; do
+  # Skip directories and non-regular files
+  [[ -f "$file" ]] || continue
+
+  # Get birth/creation year if available
+  year="$(stat -c %w "$file" | cut -d- -f1)"
+
+  # Skip files with no creation date
+  if [[ "$year" == "-" || -z "$year" ]]; then
+    echo "Skipping '$file' (no creation date available)"
+    continue
+  fi
+
+  if [[ "$commit" == true ]]; then
+    mkdir -p "$year"
+    mv -- "$file" "$year/"
+    echo "Moved '$file' -> '$year/'"
+  else
+    echo "Would move '$file' -> '$year/'"
+  fi
+done
