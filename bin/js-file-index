@@ -159,13 +159,13 @@ def parse_args() -> argparse.Namespace:
     action_group.add_argument(
         "--identify-incorrect-date-folders",
         action="store_true",
-        help="Read the existing index and print files whose folder does not match metadata-derived YYYY/YYYY-mm",
+        help="Read the existing index and print files whose folder does not match metadata-derived YYYY/mm",
     )
     action_group.add_argument(
         "--fix-incorrect-date-folders",
         action="store_true",
         help=(
-            "Read the existing index and move files into metadata-derived YYYY/YYYY-mm folders. "
+            "Read the existing index and move files into metadata-derived YYYY/mm folders. "
             "Run refresh_index manually afterwards."
         ),
     )
@@ -404,7 +404,7 @@ def build_expected_relative_folder(media_date: str | None) -> str | None:
     if parsed is None:
         return None
 
-    return f"{parsed:%Y}/{parsed:%Y-%m}"
+    return f"{parsed:%Y}/{parsed:%m}"
 
 
 def actual_relative_folder_suffix(folder_path: str) -> str | None:
@@ -425,8 +425,11 @@ def build_expected_folder_path(folder_path: str, expected_relative_folder: str) 
     base_parts = parts[:-2]
     expected_parts = expected_relative_folder.split("/")
 
+    if os.path.isabs(normalized):
+        return os.path.join(os.sep, *[part for part in base_parts if part], *expected_parts)
+
     if not base_parts:
-        return os.path.join(os.sep, *expected_parts)
+        return os.path.join(*expected_parts)
 
     return os.path.join(*base_parts, *expected_parts)
 
@@ -813,12 +816,12 @@ def identify_incorrect_date_folders(output_yaml_file: str) -> int:
                 "actual_relative_folder": actual_relative_folder,
             }
             if incorrect_count == 0:
-                print("Files in the wrong YYYY/YYYY-mm folder:")
+                print("Files in the wrong YYYY/mm folder:")
             print_incorrect_date_folder(enriched_file_info)
             incorrect_count += 1
 
     if incorrect_count == 0:
-        print("All scanned files are in the correct YYYY/YYYY-mm folder.")
+        print("All scanned files are in the correct YYYY/mm folder.")
     else:
         print(f"\nTotal incorrect date folders: {incorrect_count}")
 
@@ -836,7 +839,7 @@ def fix_incorrect_date_folders(output_yaml_file: str, commit: bool) -> int:
         path = file_info["path"]
 
         if expected_relative_folder is None:
-            raise ValueError(f"Cannot derive expected YYYY/YYYY-mm folder for {path}")
+            raise ValueError(f"Cannot derive expected YYYY/mm folder for {path}")
 
         if actual_relative_folder == expected_relative_folder:
             continue
@@ -872,7 +875,7 @@ def fix_incorrect_date_folders(output_yaml_file: str, commit: bool) -> int:
         moved_count += 1
 
     if moved_count == 0:
-        print("All scanned files are in the correct YYYY/YYYY-mm folder.")
+        print("All scanned files are in the correct YYYY/mm folder.")
     else:
         if commit:
             print(f"\nTotal files moved: {moved_count}")
