@@ -44,6 +44,7 @@ import subprocess
 import json
 import shutil
 import re
+import time
 from datetime import datetime
 from typing import Any, NotRequired, TypedDict
 
@@ -160,6 +161,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Read the existing index and print files whose folder does not match metadata-derived YYYY/YYYY-mm",
     )
+    action_group.add_argument(
+        "--fix-incorrect-date-folders",
+        action="store_true",
+        help=(
+            "Read the existing index and move files into metadata-derived YYYY/YYYY-mm folders. "
+            "Run refresh_index manually afterwards."
+        ),
+    )
     parser.add_argument(
         "--directory",
         default=os.getcwd(),
@@ -178,6 +187,17 @@ def parse_args() -> argparse.Namespace:
         "--match-name",
         action="store_true",
         help="With --compare-indexes, require the filename to also exist for matching hashes",
+    )
+    mutation_group = parser.add_mutually_exclusive_group()
+    mutation_group.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview delete or move operations without changing files (default)",
+    )
+    mutation_group.add_argument(
+        "--commit",
+        action="store_true",
+        help="Perform delete or move operations instead of the default dry run",
     )
     return parser.parse_args()
 
@@ -200,6 +220,16 @@ def validate_existing_file(file_path: str, description: str) -> None:
 
     if not os.path.isfile(file_path):
         raise ValueError(f"{description} does not exist or is not a file: {file_path}")
+
+
+def validate_mutation_mode(args: argparse.Namespace) -> bool:
+    destructive_action = args.duplicate_hashes_prompt_delete or args.fix_incorrect_date_folders
+    mutation_mode_selected = args.dry_run or args.commit
+
+    if mutation_mode_selected and not destructive_action:
+        raise ValueError("--dry-run/--commit can only be used with delete or move actions.")
+
+    return args.commit
 
 
 def calculate_sha256(file_path: str) -> str:
@@ -384,6 +414,21 @@ def actual_relative_folder_suffix(folder_path: str) -> str | None:
         return None
 
     return "/".join(parts[-2:])
+
+
+def build_expected_folder_path(folder_path: str, expected_relative_folder: str) -> str:
+    normalized = os.path.normpath(folder_path)
+    parts = normalized.split(os.sep)
+    if len(parts) < 2:
+        raise ValueError(f"Cannot derive base folder from path: {folder_path}")
+
+    base_parts = parts[:-2]
+    expected_parts = expected_relative_folder.split("/")
+
+    if not base_parts:
+        return os.path.join(os.sep, *expected_parts)
+
+    return os.path.join(*base_parts, *expected_parts)
 
 
 def get_file_info(file_path: str) -> FileInfo:
@@ -630,10 +675,12 @@ def print_duplicate_hashes(duplicates: dict[str, list[str]]) -> None:
             print(f" -> {path}")
 
 
-def prompt_delete_duplicates(duplicates: dict[str, list[str]]) -> None:
+def prompt_delete_duplicates(duplicates: dict[str, list[str]], commit: bool) -> None:
     if not duplicates:
         print("No duplicate hashes found.")
         return
+
+    action_label = "delete" if commit else "dry-run delete"
 
     for sha256_hash, paths in duplicates.items():
         print(f"\nDuplicate files for hash: {sha256_hash}")
@@ -644,15 +691,18 @@ def prompt_delete_duplicates(duplicates: dict[str, list[str]]) -> None:
                 print(f"[{i}] {path}")
 
             try:
-                to_delete = input("Choose a file number to delete or 'skip' to keep the rest: ")
+                to_delete = input(f"Choose a file number to {action_label} or 'skip' to keep the rest: ")
                 if to_delete.lower() == "skip":
                     break
 
                 index = int(to_delete) - 1
                 if 0 <= index < len(mutable_paths):
                     file_to_delete = mutable_paths.pop(index)
-                    os.remove(file_to_delete)
-                    print(f"Deleted: {file_to_delete}")
+                    if commit:
+                        os.remove(file_to_delete)
+                        print(f"Deleted: {file_to_delete}")
+                    else:
+                        print(f"Would delete: {file_to_delete}")
                 else:
                     print("Invalid selection. Please try again.")
             except (ValueError, IndexError):
@@ -775,6 +825,64 @@ def identify_incorrect_date_folders(output_yaml_file: str) -> int:
     return incorrect_count
 
 
+def fix_incorrect_date_folders(output_yaml_file: str, commit: bool) -> int:
+    moved_count = 0
+    existing_index = load_existing_index(output_yaml_file)
+
+    for file_info in existing_index["contents"]:
+        media_date_info = resolve_media_date(file_info)
+        expected_relative_folder = build_expected_relative_folder(media_date_info["media_date"])
+        actual_relative_folder = actual_relative_folder_suffix(file_info["folder"])
+        path = file_info["path"]
+
+        if expected_relative_folder is None:
+            raise ValueError(f"Cannot derive expected YYYY/YYYY-mm folder for {path}")
+
+        if actual_relative_folder == expected_relative_folder:
+            continue
+
+        if not os.path.exists(path):
+            raise ValueError(f"Indexed file does not exist: {path}")
+
+        if not os.path.isfile(path):
+            raise ValueError(f"Indexed path is not a regular file: {path}")
+
+        expected_folder = build_expected_folder_path(file_info["folder"], expected_relative_folder)
+        target_path = os.path.join(expected_folder, file_info["file"])
+
+        if os.path.exists(target_path):
+            raise ValueError(f"Destination already exists, refusing to overwrite: {target_path}")
+
+        enriched_file_info: IncorrectDateFolderInfo = {
+            "file": file_info["file"],
+            "folder": file_info["folder"],
+            "path": path,
+            "media_date": media_date_info["media_date"],
+            "media_date_source": media_date_info["media_date_source"],
+            "expected_relative_folder": expected_relative_folder,
+            "actual_relative_folder": actual_relative_folder,
+        }
+        print_incorrect_date_folder(enriched_file_info)
+        if commit:
+            os.makedirs(expected_folder, exist_ok=True)
+            os.rename(path, target_path)
+            print(f"  moved_to: {target_path}")
+        else:
+            print(f"  would_move_to: {target_path}")
+        moved_count += 1
+
+    if moved_count == 0:
+        print("All scanned files are in the correct YYYY/YYYY-mm folder.")
+    else:
+        if commit:
+            print(f"\nTotal files moved: {moved_count}")
+        else:
+            print(f"\nTotal files that would be moved: {moved_count}")
+        print("Run refresh_index manually afterwards to update the index.")
+
+    return moved_count
+
+
 def main() -> None:
     args = parse_args()
 
@@ -785,6 +893,10 @@ def main() -> None:
     output_file = os.path.abspath(args.output_file)
 
     try:
+        commit = validate_mutation_mode(args)
+        if commit:
+            print("Running in commit mode")
+            time.sleep(5)
         if args.create_index:
             validate_paths(directory_to_scan, output_file)
             create_index(directory_to_scan, output_file)
@@ -801,7 +913,7 @@ def main() -> None:
         elif args.duplicate_hashes_prompt_delete:
             validate_existing_file(output_file, "Index file")
             duplicates = find_duplicate_hashes(output_file)
-            prompt_delete_duplicates(duplicates)
+            prompt_delete_duplicates(duplicates, commit)
         elif args.compare_indexes:
             other_index_file = os.path.abspath(args.other_index) if args.other_index else None
             validate_existing_file(output_file, "Primary index file")
@@ -814,7 +926,10 @@ def main() -> None:
             incorrect_count = identify_incorrect_date_folders(output_file)
             if incorrect_count:
                 raise SystemExit(1)
-    except ValueError as exc:
+        elif args.fix_incorrect_date_folders:
+            validate_existing_file(output_file, "Index file")
+            fix_incorrect_date_folders(output_file, commit)
+    except (OSError, ValueError) as exc:
         logger.error(str(exc))
         raise SystemExit(1)
 
