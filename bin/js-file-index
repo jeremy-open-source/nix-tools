@@ -128,6 +128,7 @@ def parse_args() -> argparse.Namespace:
             "  js-file-index --create-index --directory /photos/import --output-file import.yml\n"
             "  js-file-index --refresh-index --directory /photos/import --output-file import.yml\n"
             "  js-file-index --create-index --directory /mnt/nas/photos --output-file nas.yml\n"
+            "  js-file-index --make-year-folders --directory /mnt/nas/photos --year 2026\n"
             "  js-file-index --compare-indexes --output-file nas.yml --other-index import.yml\n"
             "  js-file-index --compare-indexes --output-file nas.yml --other-index import.yml --match-name"
         ),
@@ -169,6 +170,11 @@ def parse_args() -> argparse.Namespace:
             "Run refresh_index manually afterwards."
         ),
     )
+    action_group.add_argument(
+        "--make-year-folders",
+        action="store_true",
+        help="Create YEAR/YEAR-mm folders for the supplied --year, matching _make_year_folders.sh",
+    )
     parser.add_argument(
         "--directory",
         default=os.getcwd(),
@@ -182,6 +188,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--other-index",
         help="Second YAML index file used with --compare-indexes",
+    )
+    parser.add_argument(
+        "--year",
+        help="4-digit year used with --make-year-folders, for example 2026",
     )
     parser.add_argument(
         "--match-name",
@@ -214,6 +224,11 @@ def validate_paths(directory_to_scan: str, output_file: str) -> None:
         raise ValueError(f"Output directory does not exist: {output_parent}")
 
 
+def validate_directory_exists(directory_to_scan: str) -> None:
+    if not os.path.isdir(directory_to_scan):
+        raise ValueError(f"Directory does not exist or is not a directory: {directory_to_scan}")
+
+
 def validate_existing_file(file_path: str, description: str) -> None:
     if not file_path:
         raise ValueError(f"Missing {description}.")
@@ -230,6 +245,16 @@ def validate_mutation_mode(args: argparse.Namespace) -> bool:
         raise ValueError("--dry-run/--commit can only be used with delete or move actions.")
 
     return args.commit
+
+
+def validate_year(year: str | None) -> str:
+    if not year:
+        raise ValueError("Missing --year. Provide a 4-digit year such as 2026.")
+
+    if not re.fullmatch(r"\d{4}", year):
+        raise ValueError(f"Invalid --year {year!r}. Expected a 4-digit year such as 2026.")
+
+    return year
 
 
 def calculate_sha256(file_path: str) -> str:
@@ -649,6 +674,21 @@ def refresh_index(directory_to_scan: str, output_yaml_file: str) -> None:
     )
 
 
+def make_year_folders(directory_to_scan: str, year: str) -> None:
+    created_count = 0
+
+    for month in range(1, 13):
+        month_padded = f"{month:02d}"
+        folder_path = os.path.join(directory_to_scan, year, f"{year}-{month_padded}")
+        already_exists = os.path.isdir(folder_path)
+        os.makedirs(folder_path, exist_ok=True)
+        if not already_exists:
+            created_count += 1
+
+    print(f"Ensured YEAR/YEAR-mm folders for {year} under {directory_to_scan}")
+    print(f"Folders created: {created_count}")
+
+
 def find_duplicate_hashes(output_yaml_file: str) -> dict[str, list[str]]:
     existing_index = load_existing_index(output_yaml_file)
     existing_contents = existing_index["contents"]
@@ -906,6 +946,9 @@ def main() -> None:
         elif args.add_missing:
             validate_paths(directory_to_scan, output_file)
             add_missing(directory_to_scan, output_file)
+        elif args.make_year_folders:
+            validate_directory_exists(directory_to_scan)
+            make_year_folders(directory_to_scan, validate_year(args.year))
         elif args.refresh_index:
             validate_paths(directory_to_scan, output_file)
             refresh_index(directory_to_scan, output_file)
