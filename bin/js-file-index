@@ -27,11 +27,11 @@ Refresh behavior:
 - Hash only newly discovered paths.
 
 Examples:
-    js-file-index --create-index --directory /photos/import --output-file import.yml
+    js-file-index --create-index --directory /photos/import --index-file import.yml
     js-file-index --refresh-index
-    js-file-index --create-index --directory /mnt/nas/photos --output-file nas.yml
-    js-file-index --compare-indexes --output-file nas.yml --other-index import.yml
-    js-file-index --compare-indexes --output-file nas.yml --other-index import.yml --match-name
+    js-file-index --create-index --directory /mnt/nas/photos --index-file nas.yml
+    js-file-index --compare-indexes --index-file nas.yml --other-index-file import.yml
+    js-file-index --compare-indexes --index-file nas.yml --other-index-file import.yml --match-name
 """
 
 import os
@@ -127,12 +127,12 @@ def parse_args() -> argparse.Namespace:
         allow_abbrev=False,
         epilog=(
             "Examples:\n"
-            "  js-file-index --create-index --directory /photos/import --output-file import.yml\n"
+            "  js-file-index --create-index --directory /photos/import --index-file import.yml\n"
             "  js-file-index --refresh-index\n"
-            "  js-file-index --create-index --directory /mnt/nas/photos --output-file nas.yml\n"
+            "  js-file-index --create-index --directory /mnt/nas/photos --index-file nas.yml\n"
             "  js-file-index --make-year-folders --directory /mnt/nas/photos --year 2026\n"
-            "  js-file-index --compare-indexes --output-file nas.yml --other-index import.yml\n"
-            "  js-file-index --compare-indexes --output-file nas.yml --other-index import.yml --match-name"
+            "  js-file-index --compare-indexes --index-file nas.yml --other-index-file import.yml\n"
+            "  js-file-index --compare-indexes --index-file nas.yml --other-index-file import.yml --match-name"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -157,7 +157,7 @@ def parse_args() -> argparse.Namespace:
     action_group.add_argument(
         "--compare-indexes",
         action="store_true",
-        help="Check whether every file in --other-index exists in --output-file by hash",
+        help="Check whether every file in --other-index-file exists in --index-file by hash",
     )
     action_group.add_argument(
         "--identify-incorrect-date-folders",
@@ -183,12 +183,14 @@ def parse_args() -> argparse.Namespace:
         help="Directory to scan (default: current working directory)",
     )
     parser.add_argument(
-        "--output-file",
+        "--index-file",
+        dest="index_file",
         default=DEFAULT_OUTPUT_FILE,
-        help=f"Output YAML file (default: {DEFAULT_OUTPUT_FILE})",
+        help=f"Index YAML file (default: {DEFAULT_OUTPUT_FILE})",
     )
     parser.add_argument(
-        "--other-index",
+        "--other-index-file",
+        dest="other_index_file",
         help="Second YAML index file used with --compare-indexes",
     )
     parser.add_argument(
@@ -214,16 +216,16 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def validate_paths(directory_to_scan: str, output_file: str) -> None:
+def validate_paths(directory_to_scan: str, index_file: str) -> None:
     if not os.path.isdir(directory_to_scan):
         raise ValueError(f"Directory does not exist or is not a directory: {directory_to_scan}")
 
-    if os.path.isdir(output_file):
-        raise ValueError(f"Output file points to a directory, not a file: {output_file}")
+    if os.path.isdir(index_file):
+        raise ValueError(f"Index file points to a directory, not a file: {index_file}")
 
-    output_parent = os.path.dirname(output_file) or "."
-    if not os.path.isdir(output_parent):
-        raise ValueError(f"Output directory does not exist: {output_parent}")
+    index_parent = os.path.dirname(index_file) or "."
+    if not os.path.isdir(index_parent):
+        raise ValueError(f"Index directory does not exist: {index_parent}")
 
 
 def validate_directory_exists(directory_to_scan: str) -> None:
@@ -256,7 +258,8 @@ def has_option(raw_argv: list[str], option: str) -> bool:
 def validate_refresh_arguments(raw_argv: list[str]) -> None:
     disallowed_options = [
         "--directory",
-        "--output-file",
+        "--index-file",
+        "--other-index-file",
         "--other-index",
         "--year",
         "--match-name",
@@ -555,10 +558,10 @@ def load_existing_index(file_path: str) -> IndexPayload:
     return validate_loaded_index(raw)
 
 
-def generate_hash_for_directory(directory_path: str, output_yaml_file: str) -> list[FileInfo]:
+def generate_hash_for_directory(directory_path: str, index_file: str) -> list[FileInfo]:
     files_data: list[FileInfo] = []
 
-    output_abs = os.path.abspath(output_yaml_file)
+    index_abs = os.path.abspath(index_file)
 
     for root, dirs, files in os.walk(directory_path):
         dirs.sort()
@@ -568,8 +571,8 @@ def generate_hash_for_directory(directory_path: str, output_yaml_file: str) -> l
             file_path = os.path.join(root, file)
             abs_file_path = os.path.abspath(file_path)
 
-            if abs_file_path == output_abs:
-                logger.debug("Skipping output file %s", file_path)
+            if abs_file_path == index_abs:
+                logger.debug("Skipping index file %s", file_path)
                 continue
 
             if not os.path.isfile(file_path):
@@ -590,18 +593,18 @@ def build_index_payload(contents: list[FileInfo]) -> IndexPayload:
     }
 
 
-def create_index(directory_to_scan: str, output_yaml_file: str) -> None:
-    files_data = generate_hash_for_directory(directory_to_scan, output_yaml_file)
+def create_index(directory_to_scan: str, index_file: str) -> None:
+    files_data = generate_hash_for_directory(directory_to_scan, index_file)
     payload = build_index_payload(files_data)
 
-    with open(output_yaml_file, "w", encoding="utf-8") as yaml_file:
+    with open(index_file, "w", encoding="utf-8") as yaml_file:
         yaml.safe_dump(payload, yaml_file, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
-    logger.info("File index created and saved in %s", output_yaml_file)
+    logger.info("File index created and saved in %s", index_file)
 
 
-def add_missing(directory_to_scan: str, output_yaml_file: str) -> None:
-    existing_index = load_existing_index(output_yaml_file)
+def add_missing(directory_to_scan: str, index_file: str) -> None:
+    existing_index = load_existing_index(index_file)
     existing_contents = existing_index["contents"]
 
     # Use path as the unique key rather than just filename
@@ -609,7 +612,7 @@ def add_missing(directory_to_scan: str, output_yaml_file: str) -> None:
 
     new_files_data: list[FileInfo] = []
 
-    output_abs = os.path.abspath(output_yaml_file)
+    index_abs = os.path.abspath(index_file)
 
     for root, dirs, files in os.walk(directory_to_scan):
         dirs.sort()
@@ -619,7 +622,7 @@ def add_missing(directory_to_scan: str, output_yaml_file: str) -> None:
             file_path = os.path.join(root, file)
             abs_file_path = os.path.abspath(file_path)
 
-            if abs_file_path == output_abs:
+            if abs_file_path == index_abs:
                 continue
 
             if abs_file_path not in existing_files:
@@ -631,17 +634,17 @@ def add_missing(directory_to_scan: str, output_yaml_file: str) -> None:
         updated_data = existing_contents + new_files_data
         updated_payload = build_index_payload(updated_data)
 
-        with open(output_yaml_file, "w", encoding="utf-8") as yaml_file:
+        with open(index_file, "w", encoding="utf-8") as yaml_file:
             yaml.safe_dump(updated_payload, yaml_file, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
-        logger.info("Missing files added to index and saved in %s", output_yaml_file)
+        logger.info("Missing files added to index and saved in %s", index_file)
     else:
         logger.info("No missing files found to add.")
 
 
-def iter_directory_file_paths(directory_to_scan: str, output_yaml_file: str) -> set[str]:
+def iter_directory_file_paths(directory_to_scan: str, index_file: str) -> set[str]:
     current_paths: set[str] = set()
-    output_abs = os.path.abspath(output_yaml_file)
+    index_abs = os.path.abspath(index_file)
 
     for root, dirs, files in os.walk(directory_to_scan):
         dirs.sort()
@@ -651,7 +654,7 @@ def iter_directory_file_paths(directory_to_scan: str, output_yaml_file: str) -> 
             file_path = os.path.join(root, file)
             abs_file_path = os.path.abspath(file_path)
 
-            if abs_file_path == output_abs:
+            if abs_file_path == index_abs:
                 continue
 
             if not os.path.isfile(file_path):
@@ -662,13 +665,13 @@ def iter_directory_file_paths(directory_to_scan: str, output_yaml_file: str) -> 
     return current_paths
 
 
-def refresh_index(directory_to_scan: str, output_yaml_file: str) -> None:
-    validate_existing_file(output_yaml_file, "Index file")
-    existing_index = load_existing_index(output_yaml_file)
+def refresh_index(directory_to_scan: str, index_file: str) -> None:
+    validate_existing_file(index_file, "Index file")
+    existing_index = load_existing_index(index_file)
     existing_contents = existing_index["contents"]
     existing_by_path = {file_info["path"]: file_info for file_info in existing_contents}
 
-    current_paths = iter_directory_file_paths(directory_to_scan, output_yaml_file)
+    current_paths = iter_directory_file_paths(directory_to_scan, index_file)
 
     kept_contents: list[FileInfo] = []
     removed_count = 0
@@ -685,7 +688,7 @@ def refresh_index(directory_to_scan: str, output_yaml_file: str) -> None:
             "Refresh found zero matching indexed paths in the current scan. "
             f"Sample indexed path: {sample_existing_path}. "
             f"Sample scanned path: {sample_current_path}. "
-            "Check that --directory and --output-file refer to the same library root and index."
+            "Check that --directory and --index-file refer to the same library root and index."
         )
 
     new_files_data: list[FileInfo] = []
@@ -699,12 +702,12 @@ def refresh_index(directory_to_scan: str, output_yaml_file: str) -> None:
     refreshed_contents = kept_contents + new_files_data
     refreshed_payload = build_index_payload(refreshed_contents)
 
-    with open(output_yaml_file, "w", encoding="utf-8") as yaml_file:
+    with open(index_file, "w", encoding="utf-8") as yaml_file:
         yaml.safe_dump(refreshed_payload, yaml_file, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
     logger.info(
         "Index refreshed in %s. Kept %s existing entries, added %s new files, removed %s missing entries.",
-        output_yaml_file,
+        index_file,
         len(kept_contents),
         len(new_files_data),
         removed_count,
@@ -726,8 +729,8 @@ def make_year_folders(directory_to_scan: str, year: str) -> None:
     print(f"Folders created: {created_count}")
 
 
-def find_duplicate_hashes(output_yaml_file: str) -> dict[str, list[str]]:
-    existing_index = load_existing_index(output_yaml_file)
+def find_duplicate_hashes(index_file: str) -> dict[str, list[str]]:
+    existing_index = load_existing_index(index_file)
     existing_contents = existing_index["contents"]
 
     hash_map: dict[str, list[str]] = {}
@@ -800,16 +803,16 @@ def build_hash_name_lookup(index_contents: list[FileInfo]) -> dict[str, set[str]
     return lookup
 
 
-def compare_indexes(output_yaml_file: str, other_index_file: str, match_name: bool) -> bool:
-    existing_index = load_existing_index(output_yaml_file)
-    other_index = load_existing_index(other_index_file)
+def compare_indexes(index_file: str, other_index_file: str, match_name: bool) -> bool:
+    existing_index = load_existing_index(index_file)
+    other_index_payload = load_existing_index(other_index_file)
 
     existing_lookup = build_hash_name_lookup(existing_index["contents"])
     missing_hashes: list[dict[str, str]] = []
     name_mismatches: list[dict[str, str]] = []
     matched_files = 0
 
-    for file_info in other_index["contents"]:
+    for file_info in other_index_payload["contents"]:
         sha256_hash = file_info["sha256_hash"]
         file_name = file_info["file"]
         path = file_info.get("path") or os.path.join(file_info["folder"], file_info["file"])
@@ -837,8 +840,8 @@ def compare_indexes(output_yaml_file: str, other_index_file: str, match_name: bo
 
         matched_files += 1
 
-    print(f"Compared {len(other_index['contents'])} files from {other_index_file}")
-    print(f"Against {len(existing_index['contents'])} files in {output_yaml_file}")
+    print(f"Compared {len(other_index_payload['contents'])} files from {other_index_file}")
+    print(f"Against {len(existing_index['contents'])} files in {index_file}")
     print(f"Matched: {matched_files}")
     print(f"Missing by hash: {len(missing_hashes)}")
 
@@ -868,9 +871,9 @@ def print_incorrect_date_folder(file_info: IncorrectDateFolderInfo) -> None:
     print(f"  expected_relative_folder: {file_info['expected_relative_folder']}")
 
 
-def identify_incorrect_date_folders(output_yaml_file: str) -> int:
+def identify_incorrect_date_folders(index_file: str) -> int:
     incorrect_count = 0
-    existing_index = load_existing_index(output_yaml_file)
+    existing_index = load_existing_index(index_file)
 
     for file_info in existing_index["contents"]:
         media_date_info = resolve_media_date(file_info)
@@ -905,9 +908,9 @@ def identify_incorrect_date_folders(output_yaml_file: str) -> int:
     return incorrect_count
 
 
-def fix_incorrect_date_folders(output_yaml_file: str, commit: bool) -> int:
+def fix_incorrect_date_folders(index_file: str, commit: bool) -> int:
     moved_count = 0
-    existing_index = load_existing_index(output_yaml_file)
+    existing_index = load_existing_index(index_file)
 
     for file_info in existing_index["contents"]:
         media_date_info = resolve_media_date(file_info)
@@ -983,7 +986,7 @@ def main() -> None:
     logging.basicConfig(level=getattr(logging, loglevel, logging.INFO))
 
     directory_to_scan = os.path.abspath(args.directory)
-    output_file = os.path.abspath(args.output_file)
+    index_file = os.path.abspath(args.index_file)
 
     try:
         commit = validate_mutation_mode(args)
@@ -991,42 +994,42 @@ def main() -> None:
             print("Running in commit mode")
             time.sleep(5)
         if args.create_index:
-            validate_paths(directory_to_scan, output_file)
-            create_index(directory_to_scan, output_file)
+            validate_paths(directory_to_scan, index_file)
+            create_index(directory_to_scan, index_file)
         elif args.add_missing:
-            validate_paths(directory_to_scan, output_file)
-            add_missing(directory_to_scan, output_file)
+            validate_paths(directory_to_scan, index_file)
+            add_missing(directory_to_scan, index_file)
         elif args.make_year_folders:
             validate_directory_exists(directory_to_scan)
             make_year_folders(directory_to_scan, validate_year(args.year))
         elif args.refresh_index:
             validate_refresh_arguments(raw_argv)
             refresh_directory = os.path.abspath(os.getcwd())
-            refresh_output_file = os.path.join(refresh_directory, DEFAULT_OUTPUT_FILE)
-            refresh_index(refresh_directory, refresh_output_file)
+            refresh_index_file = os.path.join(refresh_directory, DEFAULT_OUTPUT_FILE)
+            refresh_index(refresh_directory, refresh_index_file)
         elif args.duplicate_hashes:
-            validate_existing_file(output_file, "Index file")
-            duplicates = find_duplicate_hashes(output_file)
+            validate_existing_file(index_file, "Index file")
+            duplicates = find_duplicate_hashes(index_file)
             print_duplicate_hashes(duplicates)
         elif args.duplicate_hashes_prompt_delete:
-            validate_existing_file(output_file, "Index file")
-            duplicates = find_duplicate_hashes(output_file)
+            validate_existing_file(index_file, "Index file")
+            duplicates = find_duplicate_hashes(index_file)
             prompt_delete_duplicates(duplicates, commit)
         elif args.compare_indexes:
-            other_index_file = os.path.abspath(args.other_index) if args.other_index else None
-            validate_existing_file(output_file, "Primary index file")
+            other_index_file = os.path.abspath(args.other_index_file) if args.other_index_file else None
+            validate_existing_file(index_file, "Primary index file")
             validate_existing_file(other_index_file, "Comparison index file")
-            success = compare_indexes(output_file, other_index_file, args.match_name)
+            success = compare_indexes(index_file, other_index_file, args.match_name)
             if not success:
                 raise SystemExit(1)
         elif args.identify_incorrect_date_folders:
-            validate_existing_file(output_file, "Index file")
-            incorrect_count = identify_incorrect_date_folders(output_file)
+            validate_existing_file(index_file, "Index file")
+            incorrect_count = identify_incorrect_date_folders(index_file)
             if incorrect_count:
                 raise SystemExit(1)
         elif args.fix_incorrect_date_folders:
-            validate_existing_file(output_file, "Index file")
-            fix_incorrect_date_folders(output_file, commit)
+            validate_existing_file(index_file, "Index file")
+            fix_incorrect_date_folders(index_file, commit)
     except (OSError, ValueError) as exc:
         logger.error(str(exc))
         raise SystemExit(1)
