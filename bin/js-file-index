@@ -123,6 +123,7 @@ class IncorrectDateFolderInfo(TypedDict):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Manage file indexes with SHA-256 hashes.",
+        allow_abbrev=False,
         epilog=(
             "Examples:\n"
             "  js-file-index --create-index --directory /photos/import --output-file import.yml\n"
