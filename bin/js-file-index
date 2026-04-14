@@ -28,7 +28,7 @@ Refresh behavior:
 
 Examples:
     js-file-index --create-index --directory /photos/import --output-file import.yml
-    js-file-index --refresh-index --directory /photos/import --output-file import.yml
+    js-file-index --refresh-index
     js-file-index --create-index --directory /mnt/nas/photos --output-file nas.yml
     js-file-index --compare-indexes --output-file nas.yml --other-index import.yml
     js-file-index --compare-indexes --output-file nas.yml --other-index import.yml --match-name
@@ -44,6 +44,7 @@ import subprocess
 import json
 import shutil
 import re
+import sys
 import time
 from datetime import datetime
 from typing import Any, NotRequired, TypedDict
@@ -127,7 +128,7 @@ def parse_args() -> argparse.Namespace:
         epilog=(
             "Examples:\n"
             "  js-file-index --create-index --directory /photos/import --output-file import.yml\n"
-            "  js-file-index --refresh-index --directory /photos/import --output-file import.yml\n"
+            "  js-file-index --refresh-index\n"
             "  js-file-index --create-index --directory /mnt/nas/photos --output-file nas.yml\n"
             "  js-file-index --make-year-folders --directory /mnt/nas/photos --year 2026\n"
             "  js-file-index --compare-indexes --output-file nas.yml --other-index import.yml\n"
@@ -141,7 +142,7 @@ def parse_args() -> argparse.Namespace:
     action_group.add_argument(
         "--refresh-index",
         action="store_true",
-        help="Add new files and remove entries whose files no longer exist",
+        help="Quick refresh index (Add new files and remove files in the index that no longer exist)",
     )
     action_group.add_argument(
         "--duplicate-hashes",
@@ -168,7 +169,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Read the existing index and move files into metadata-derived YYYY/mm folders. "
-            "Run refresh_index manually afterwards."
+            "Run --refresh-index manually afterwards."
         ),
     )
     action_group.add_argument(
@@ -246,6 +247,30 @@ def validate_mutation_mode(args: argparse.Namespace) -> bool:
         raise ValueError("--dry-run/--commit can only be used with delete or move actions.")
 
     return args.commit
+
+
+def has_option(raw_argv: list[str], option: str) -> bool:
+    return any(arg == option or arg.startswith(f"{option}=") for arg in raw_argv)
+
+
+def validate_refresh_arguments(raw_argv: list[str]) -> None:
+    disallowed_options = [
+        "--directory",
+        "--output-file",
+        "--other-index",
+        "--year",
+        "--match-name",
+        "--dry-run",
+        "--commit",
+    ]
+    provided_disallowed = [option for option in disallowed_options if has_option(raw_argv, option)]
+
+    if provided_disallowed:
+        joined = ", ".join(provided_disallowed)
+        raise ValueError(
+            f"--refresh does not take extra options ({joined}). "
+            "Run it from the directory containing js_file_index.yml."
+        )
 
 
 def validate_year(year: str | None) -> str:
@@ -638,6 +663,7 @@ def iter_directory_file_paths(directory_to_scan: str, output_yaml_file: str) -> 
 
 
 def refresh_index(directory_to_scan: str, output_yaml_file: str) -> None:
+    validate_existing_file(output_yaml_file, "Index file")
     existing_index = load_existing_index(output_yaml_file)
     existing_contents = existing_index["contents"]
     existing_by_path = {file_info["path"]: file_info for file_info in existing_contents}
@@ -651,6 +677,16 @@ def refresh_index(directory_to_scan: str, output_yaml_file: str) -> None:
             kept_contents.append(file_info)
         else:
             removed_count += 1
+
+    if existing_contents and current_paths and not kept_contents:
+        sample_existing_path = next(iter(existing_by_path))
+        sample_current_path = next(iter(sorted(current_paths)))
+        raise ValueError(
+            "Refresh found zero matching indexed paths in the current scan. "
+            f"Sample indexed path: {sample_existing_path}. "
+            f"Sample scanned path: {sample_current_path}. "
+            "Check that --directory and --output-file refer to the same library root and index."
+        )
 
     new_files_data: list[FileInfo] = []
     for path in sorted(current_paths):
@@ -934,12 +970,13 @@ def fix_incorrect_date_folders(output_yaml_file: str, commit: bool) -> int:
             print(f"\nTotal files moved: {moved_count}")
         else:
             print(f"\nTotal files that would be moved: {moved_count}")
-        print("Run refresh_index manually afterwards to update the index.")
+        print("Run `js-file-index --refresh-index` manually afterwards to update the index.")
 
     return moved_count
 
 
 def main() -> None:
+    raw_argv = sys.argv[1:]
     args = parse_args()
 
     loglevel = os.getenv("LOGLEVEL", "INFO").upper()
@@ -963,8 +1000,10 @@ def main() -> None:
             validate_directory_exists(directory_to_scan)
             make_year_folders(directory_to_scan, validate_year(args.year))
         elif args.refresh_index:
-            validate_paths(directory_to_scan, output_file)
-            refresh_index(directory_to_scan, output_file)
+            validate_refresh_arguments(raw_argv)
+            refresh_directory = os.path.abspath(os.getcwd())
+            refresh_output_file = os.path.join(refresh_directory, DEFAULT_OUTPUT_FILE)
+            refresh_index(refresh_directory, refresh_output_file)
         elif args.duplicate_hashes:
             validate_existing_file(output_file, "Index file")
             duplicates = find_duplicate_hashes(output_file)
