@@ -20,6 +20,7 @@ Common use cases:
 - Refresh an existing index after moving, deleting, and adding files.
 - Compare the two indexes to confirm every imported photo exists in the NAS,
   even if the destination folders are different.
+- Detect corrupt image and video files before importing them.
 
 Refresh behavior:
 - Keep existing index entries when the file path still exists.
@@ -32,6 +33,7 @@ Examples:
     js-file-index --create-index --directory /mnt/nas/photos --index-file nas.yml
     js-file-index --compare-indexes --index-file nas.yml --other-index-file import.yml
     js-file-index --compare-indexes --index-file nas.yml --other-index-file import.yml --match-name
+    js-file-index --detect-corrupt-files --directory /home/hermitz/Desktop/a
 """
 
 import os
@@ -48,6 +50,8 @@ import sys
 import time
 from datetime import datetime
 from typing import Any, NotRequired, TypedDict
+
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +125,11 @@ class IncorrectDateFolderInfo(TypedDict):
     expected_relative_folder: str | None
 
 
+class CorruptFileInfo(TypedDict):
+    path: str
+    reason: str
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Manage file indexes with SHA-256 hashes.",
@@ -176,6 +185,11 @@ def parse_args() -> argparse.Namespace:
         "--make-year-folders",
         action="store_true",
         help="Create YEAR/YEAR-mm folders for the supplied --year, matching _make_year_folders.sh",
+    )
+    action_group.add_argument(
+        "--detect-corrupt-files",
+        action="store_true",
+        help="Scan a directory and print files that look corrupt or unreadable",
     )
     parser.add_argument(
         "--directory",
@@ -374,6 +388,129 @@ def get_date_created(file_path: str) -> str | None:
 
     return None
 
+
+def is_all_zero_file(file_path: str) -> bool:
+    with open(file_path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            if any(chunk):
+                return False
+    return True
+
+
+def has_mp4_ftyp_box(file_path: str) -> bool:
+    with open(file_path, "rb") as handle:
+        header = handle.read(64)
+    return len(header) >= 12 and header[4:8] == b"ftyp"
+
+
+def run_validator(command: list[str]) -> tuple[bool, str | None]:
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return False, str(exc)
+
+    if result.returncode == 0:
+        return True, None
+
+    stderr = result.stderr.strip()
+    stdout = result.stdout.strip()
+    message = stderr or stdout or f"validator exited with status {result.returncode}"
+    return False, message
+
+
+def validate_image_file(file_path: str) -> str | None:
+    try:
+        with Image.open(file_path) as image:
+            image.verify()
+        with Image.open(file_path) as image:
+            image.load()
+    except Exception as exc:
+        return f"pillow failed: {exc}"
+
+    if shutil.which("identify"):
+        is_valid, message = run_validator(["identify", "-regard-warnings", file_path])
+        if not is_valid:
+            return f"identify failed: {message}"
+
+    return None
+
+
+def detect_file_corruption(file_path: str) -> str | None:
+    try:
+        size = os.path.getsize(file_path)
+    except OSError as exc:
+        return f"failed to stat file: {exc}"
+
+    if size == 0:
+        return "empty file (0 bytes)"
+
+    extension = (get_extension(file_path) or "").lower()
+
+    try:
+        if is_all_zero_file(file_path):
+            return "file contents are all zero bytes"
+    except OSError as exc:
+        return f"failed to read file: {exc}"
+
+    if extension in {"jpg", "jpeg", "png", "gif", "webp", "tif", "tiff", "bmp"}:
+        return validate_image_file(file_path)
+
+    if extension in {"mp4", "m4v", "mov"}:
+        try:
+            if not has_mp4_ftyp_box(file_path):
+                return "missing MP4 ftyp header"
+        except OSError as exc:
+            return f"failed to inspect MP4 header: {exc}"
+
+        if shutil.which("ffprobe"):
+            is_valid, message = run_validator(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    file_path,
+                ]
+            )
+            if not is_valid:
+                return f"ffprobe failed: {message}"
+
+    return None
+
+
+def detect_corrupt_files(directory_to_scan: str, index_file: str) -> list[CorruptFileInfo]:
+    corrupt_files: list[CorruptFileInfo] = []
+
+    for path in sorted(iter_directory_file_paths(directory_to_scan, index_file)):
+        reason = detect_file_corruption(path)
+        if reason is None:
+            continue
+
+        corrupt_files.append(
+            {
+                "path": path,
+                "reason": reason,
+            }
+        )
+
+    if not corrupt_files:
+        print("No corrupt files detected.")
+        return corrupt_files
+
+    print("Corrupt files detected:")
+    for item in corrupt_files:
+        print(f" - {item['path']}: {item['reason']}")
+
+    print(f"\nTotal corrupt files: {len(corrupt_files)}")
+    return corrupt_files
 
 
 def parse_media_datetime(value: Any) -> datetime | None:
@@ -953,7 +1090,10 @@ def fix_incorrect_date_folders(index_file: str, commit: bool) -> int:
 
         if os.path.exists(target_path):
             print(f"  blocked_move_to: {target_path}")
-            raise ValueError(f"Cannot move file because destination already exists: {move_description}")
+            if commit:
+                raise ValueError(f"Cannot move file because destination already exists: {move_description}")
+            print("  skipped_reason: destination already exists")
+            continue
 
         if commit:
             try:
@@ -1002,6 +1142,11 @@ def main() -> None:
         elif args.make_year_folders:
             validate_directory_exists(directory_to_scan)
             make_year_folders(directory_to_scan, validate_year(args.year))
+        elif args.detect_corrupt_files:
+            validate_directory_exists(directory_to_scan)
+            corrupt_files = detect_corrupt_files(directory_to_scan, index_file)
+            if corrupt_files:
+                raise SystemExit(1)
         elif args.refresh_index:
             validate_refresh_arguments(raw_argv)
             refresh_directory = os.path.abspath(os.getcwd())
