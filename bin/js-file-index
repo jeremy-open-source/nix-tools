@@ -130,6 +130,23 @@ class CorruptFileInfo(TypedDict):
     reason: str
 
 
+COMPARABLE_FILE_INFO_KEYS = (
+    "sha256_hash",
+    "size",
+    "extension",
+    "mime_type",
+    "is_symlink",
+    "exif",
+)
+
+IGNORED_EXIF_COMPARISON_KEYS = (
+    "FileModifyDate",
+    "FileAccessDate",
+    "FileCreateDate",
+    "FileInodeChangeDate",
+)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Manage file indexes with SHA-256 hashes.",
@@ -216,6 +233,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="With --compare-indexes, require the filename to also exist for matching hashes",
     )
+    parser.add_argument(
+        "--overwrite-existing",
+        action="store_true",
+        help=(
+            "With --fix-incorrect-date-folders, allow an existing destination file only when the "
+            "source and destination have the same hash and metadata"
+        ),
+    )
     mutation_group = parser.add_mutually_exclusive_group()
     mutation_group.add_argument(
         "--dry-run",
@@ -262,6 +287,9 @@ def validate_mutation_mode(args: argparse.Namespace) -> bool:
     if mutation_mode_selected and not destructive_action:
         raise ValueError("--dry-run/--commit can only be used with delete or move actions.")
 
+    if args.overwrite_existing and not args.fix_incorrect_date_folders:
+        raise ValueError("--overwrite-existing can only be used with --fix-incorrect-date-folders.")
+
     return args.commit
 
 
@@ -277,6 +305,7 @@ def validate_refresh_arguments(raw_argv: list[str]) -> None:
         "--other-index",
         "--year",
         "--match-name",
+        "--overwrite-existing",
         "--dry-run",
         "--commit",
     ]
@@ -650,6 +679,82 @@ def get_file_info(file_path: str) -> FileInfo:
         info["exif"] = exif_data
 
     return info
+
+
+def build_comparable_file_info(file_info: FileInfo) -> dict[str, Any]:
+    comparable: dict[str, Any] = {}
+    for key in COMPARABLE_FILE_INFO_KEYS:
+        if key == "exif":
+            comparable["exif"] = build_comparable_exif(file_info.get("exif", {}))
+            continue
+        comparable[key] = file_info[key]
+    return comparable
+
+
+def build_comparable_exif(exif_data: dict[str, Any]) -> dict[str, Any]:
+    comparable: dict[str, Any] = {}
+
+    for key, value in exif_data.items():
+        if key in IGNORED_EXIF_COMPARISON_KEYS:
+            continue
+
+        if isinstance(value, dict):
+            nested = build_comparable_exif(value)
+            if nested:
+                comparable[key] = nested
+            continue
+
+        comparable[key] = value
+
+    return comparable
+
+
+def format_difference_value(value: Any) -> str:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return str(value)
+
+    try:
+        return json.dumps(value, sort_keys=True, default=str)
+    except TypeError:
+        return str(value)
+
+
+def collect_value_differences(source_value: Any, target_value: Any, key_path: str) -> list[str]:
+    if isinstance(source_value, dict) and isinstance(target_value, dict):
+        differences: list[str] = []
+        for key in sorted(set(source_value) | set(target_value)):
+            differences.extend(
+                collect_value_differences(
+                    source_value.get(key),
+                    target_value.get(key),
+                    f"{key_path}.{key}",
+                )
+            )
+        return differences
+
+    if source_value != target_value:
+        return [
+            f"{key_path}: {format_difference_value(source_value)} vs {format_difference_value(target_value)}"
+        ]
+
+    return []
+
+
+def compare_file_hash_and_metadata(source_path: str, target_path: str) -> list[str]:
+    source_info = build_comparable_file_info(get_file_info(source_path))
+    target_info = build_comparable_file_info(get_file_info(target_path))
+    differences: list[str] = []
+
+    for key in COMPARABLE_FILE_INFO_KEYS:
+        differences.extend(
+            collect_value_differences(
+                source_info.get(key),
+                target_info.get(key),
+                key,
+            )
+        )
+
+    return differences
 
 
 def validate_loaded_index(data: Any) -> IndexPayload:
@@ -1045,8 +1150,9 @@ def identify_incorrect_date_folders(index_file: str) -> int:
     return incorrect_count
 
 
-def fix_incorrect_date_folders(index_file: str, commit: bool) -> int:
+def fix_incorrect_date_folders(index_file: str, commit: bool, overwrite_existing: bool) -> int:
     moved_count = 0
+    bail_count = 0
     existing_index = load_existing_index(index_file)
 
     for file_info in existing_index["contents"]:
@@ -1090,9 +1196,41 @@ def fix_incorrect_date_folders(index_file: str, commit: bool) -> int:
 
         if os.path.exists(target_path):
             print(f"  blocked_move_to: {target_path}")
+            if not overwrite_existing:
+                if commit:
+                    raise ValueError(f"Cannot move file because destination already exists: {move_description}")
+                print("  skipped_reason: destination already exists")
+                continue
+
+            if not os.path.isfile(target_path):
+                if commit:
+                    raise ValueError(
+                        f"Cannot overwrite destination because it is not a regular file: {move_description}"
+                    )
+                print("  would_bail_reason: destination exists but is not a regular file")
+                bail_count += 1
+                continue
+
+            differences = compare_file_hash_and_metadata(path, target_path)
+            if differences:
+                message_key = "skipped_reason" if commit else "would_bail_reason"
+                print(f"  {message_key}: destination exists and differs in:")
+                for difference in differences:
+                    print(f"    -> {difference}")
+                bail_count += 1
+                continue
+
             if commit:
-                raise ValueError(f"Cannot move file because destination already exists: {move_description}")
-            print("  skipped_reason: destination already exists")
+                try:
+                    os.remove(path)
+                except OSError as exc:
+                    raise OSError(f"Failed to keep existing destination for {move_description}: {exc}") from exc
+                print(f"  kept_existing_destination: {target_path}")
+            else:
+                print(f"  would_overwrite_existing: {target_path}")
+                print("  matching_hash: true")
+                print("  matching_exif_metadata: true")
+            moved_count += 1
             continue
 
         if commit:
@@ -1106,13 +1244,17 @@ def fix_incorrect_date_folders(index_file: str, commit: bool) -> int:
             print(f"  would_move_to: {target_path}")
         moved_count += 1
 
-    if moved_count == 0:
+    if moved_count == 0 and bail_count == 0:
         print("All scanned files are in the correct YYYY/mm folder.")
     else:
         if commit:
             print(f"\nTotal files moved: {moved_count}")
+            if bail_count:
+                print(f"Total files skipped: {bail_count}")
         else:
             print(f"\nTotal files that would be moved: {moved_count}")
+            if bail_count:
+                print(f"Total files that would bail: {bail_count}")
         print("Run `js-file-index --refresh-index` manually afterwards to update the index.")
 
     return moved_count
@@ -1174,7 +1316,7 @@ def main() -> None:
                 raise SystemExit(1)
         elif args.fix_incorrect_date_folders:
             validate_existing_file(index_file, "Index file")
-            fix_incorrect_date_folders(index_file, commit)
+            fix_incorrect_date_folders(index_file, commit, args.overwrite_existing)
     except (OSError, ValueError) as exc:
         logger.error(str(exc))
         raise SystemExit(1)
