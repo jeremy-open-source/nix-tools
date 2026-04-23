@@ -15,7 +15,7 @@ OUTPUT=""
 # Add extensions (without the dot) to this list to ignore contents but still show the file path
 IGNORE_EXTENSIONS=("log" "lock" "bin" "exe" "png" "jpg" "zip" "gz" "stl" "step")
 # Add folder names to skip entirely during file discovery
-IGNORE_FOLDERS=(".git" ".terraform" ".vagrant" ".idea")
+IGNORE_FOLDERS=(".git" ".terraform" ".vagrant" ".idea" ".venv")
 # Add filename patterns to skip entirely during file discovery (supports globs)
 # Examples: "terraform.tfstate*", ".*"
 IGNORE_FILE_PATTERNS=(".DS_Store" "kubeconfig.yml" "terraform.tfstate*" ".terraform.lock.hcl")
